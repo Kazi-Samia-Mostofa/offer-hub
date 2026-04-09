@@ -14,9 +14,9 @@ const Footer = () => {
               Discover the best deals from trusted sellers. LookUp connects buyers and sellers in one seamless marketplace.
             </p>
             <div className="flex gap-3">
-              {[Facebook, Twitter, Instagram, Youtube].map((Icon, i) => (
-                <a key={i} href="#" className="p-2 rounded-full bg-primary/20 hover:bg-primary/40 transition-colors">
-                  <Icon className="h-4 w-4" />
+              {["Facebook", "Twitter", "Instagram", "YouTube"].map((name, i) => (
+                <a key={i} href="#" className="p-2 rounded-full bg-primary/20 hover:bg-primary/40 transition-colors text-xs font-bold">
+                  {name[0]}
                 </a>
               ))}
             </div>
