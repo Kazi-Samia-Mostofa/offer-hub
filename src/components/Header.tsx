@@ -3,7 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { Search, Menu, X, Bell, ChevronDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import logo from "@/assets/logo.jpeg";
+import logo from "@/assets/Lookup_logo.png";
 
 const Header = () => {
   const [searchQuery, setSearchQuery] = useState("");
@@ -19,14 +19,14 @@ const Header = () => {
 
   return (
     <header className="sticky top-0 z-50 border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-      <div className="container flex h-16 items-center justify-between gap-4">
+      <div className="container flex h-20 items-center justify-between gap-4">
         {/* Logo */}
         <Link to="/" className="flex items-center gap-2 shrink-0">
-          <img src={logo} alt="LookUp" className="h-10 w-auto" />
+          <img src={logo} alt="LookUp" className="h-16 w-auto" />
         </Link>
 
         {/* Search Bar - Desktop */}
-        <form onSubmit={handleSearch} className="hidden md:flex flex-1 max-w-lg">
+        <form onSubmit={handleSearch} className="md:flex flex-1 max-w-lg">
           <div className="relative w-full">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
@@ -41,11 +41,14 @@ const Header = () => {
 
         {/* Desktop Nav */}
         <nav className="hidden md:flex items-center gap-3">
+          <Link to="/droplist">
+            <Button variant="ghost" size="sm">Droplist</Button>
+          </Link>
           <Link to="/login">
             <Button variant="ghost" size="sm">Log In</Button>
           </Link>
           <Link to="/signup">
-            <Button size="sm">Sign Up</Button>
+            <Button size="sm" variant="default">Sign Up</Button>
           </Link>
         </nav>
 
