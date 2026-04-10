@@ -1,21 +1,150 @@
-import { useState } from "react";
-import { Star, Upload, Package, Eye, Users, Plus, Trash2, Edit, Save } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
+import { toast } from "sonner";
+import { Upload, Package, Eye, Users, Trash2, Edit, Save, Store, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
+import { supabase } from "@/supabaseClient";
+import { isSellerStoreReady } from "@/lib/sellerStore";
+
+const MAX_PRODUCT_IMAGES = 5;
 
 const SellerDashboard = () => {
-  const [activeTab, setActiveTab] = useState<"profile" | "upload" | "products">("profile");
+  const navigate = useNavigate();
+  const [activeTab, setActiveTab] = useState<"upload" | "products">("upload");
+  const [gateLoading, setGateLoading] = useState(true);
+  const [storeName, setStoreName] = useState("");
+  const [storeLogoUrl, setStoreLogoUrl] = useState("");
+  const [productImages, setProductImages] = useState<{ file: File; preview: string }[]>([]);
+  const productImagesRef = useRef(productImages);
+  productImagesRef.current = productImages;
+  const productFileInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    return () => {
+      productImagesRef.current.forEach((item) => URL.revokeObjectURL(item.preview));
+    };
+  }, []);
+
+  const handleProductFiles = (files: FileList | null) => {
+    if (!files?.length) return;
+    const incoming = Array.from(files).filter((f) => f.type.startsWith("image/"));
+    if (incoming.length === 0) {
+      toast.error("Please choose image files only.");
+      return;
+    }
+    setProductImages((prev) => {
+      const room = MAX_PRODUCT_IMAGES - prev.length;
+      if (room <= 0) {
+        toast.message(`You can add at most ${MAX_PRODUCT_IMAGES} images.`);
+        return prev;
+      }
+      const toAdd = incoming.slice(0, room);
+      if (incoming.length > room) {
+        toast.message(`Only ${room} more image(s) added (max ${MAX_PRODUCT_IMAGES} total).`);
+      }
+      const newEntries = toAdd.map((file) => ({
+        file,
+        preview: URL.createObjectURL(file),
+      }));
+      return [...prev, ...newEntries];
+    });
+  };
+
+  const removeProductImage = (index: number) => {
+    setProductImages((prev) => {
+      const next = [...prev];
+      const [removed] = next.splice(index, 1);
+      if (removed) URL.revokeObjectURL(removed.preview);
+      return next;
+    });
+  };
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function gate() {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (cancelled) return;
+
+      if (!user) {
+        navigate("/login", { replace: true });
+        return;
+      }
+
+      const role = user.user_metadata?.role as string | undefined;
+      if (role !== "seller") {
+        navigate("/", { replace: true });
+        return;
+      }
+
+      const { data, error } = await supabase
+        .from("seller_profiles")
+        .select("store_name, description, email, phone, location, logo_url")
+        .eq("user_id", user.id)
+        .maybeSingle();
+
+      if (cancelled) return;
+      if (error) {
+        console.error(error);
+        setGateLoading(false);
+        return;
+      }
+
+      if (!isSellerStoreReady(data)) {
+        navigate("/seller/setup", { replace: true });
+        return;
+      }
+
+      setStoreName(data.store_name?.trim() || "Store");
+      setStoreLogoUrl((data.logo_url ?? "").trim());
+      setGateLoading(false);
+    }
+
+    gate();
+    return () => {
+      cancelled = true;
+    };
+  }, [navigate]);
+
+  if (gateLoading) {
+    return (
+      <div className="min-h-screen flex flex-col">
+        <Header />
+        <main className="flex-1 flex items-center justify-center bg-secondary/30">
+          <p className="text-sm text-muted-foreground">Loading dashboard…</p>
+        </main>
+        <Footer />
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen flex flex-col">
       <Header />
       <main className="flex-1 bg-secondary/30 py-8">
         <div className="container">
-          <h1 className="text-3xl font-bold text-foreground mb-6">Seller Dashboard</h1>
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
+            <div className="flex items-center gap-4 min-w-0">
+              <div className="h-14 w-14 sm:h-16 sm:w-16 rounded-full border-2 border-border bg-secondary overflow-hidden shrink-0 flex items-center justify-center shadow-sm">
+                {storeLogoUrl ? (
+                  <img src={storeLogoUrl} alt="" className="h-full w-full object-cover" />
+                ) : (
+                  <Store className="h-7 w-7 text-muted-foreground" />
+                )}
+              </div>
+              <h1 className="text-2xl sm:text-3xl font-bold text-foreground truncate">{storeName}</h1>
+            </div>
+            <Button variant="outline" size="sm" className="shrink-0" asChild>
+              <Link to="/seller/setup?edit=true">Edit store profile</Link>
+            </Button>
+          </div>
 
           {/* Stats */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
@@ -38,7 +167,7 @@ const SellerDashboard = () => {
 
           {/* Tabs */}
           <div className="flex gap-2 mb-6 border-b border-border">
-            {(["profile", "upload", "products"] as const).map((tab) => (
+            {(["upload", "products"] as const).map((tab) => (
               <button
                 key={tab}
                 onClick={() => setActiveTab(tab)}
@@ -48,61 +177,65 @@ const SellerDashboard = () => {
                     : "border-transparent text-muted-foreground hover:text-foreground"
                 }`}
               >
-                {tab === "upload" ? "Upload Product" : tab === "products" ? "My Products" : "Store Profile"}
+                {tab === "upload" ? "Upload Product" : "My Products"}
               </button>
             ))}
           </div>
-
-          {/* Profile Tab */}
-          {activeTab === "profile" && (
-            <div className="bg-card rounded-lg border border-border p-6 space-y-5 max-w-2xl">
-              <div className="flex items-center gap-4">
-                <div className="w-24 h-24 rounded-full bg-secondary flex items-center justify-center border-2 border-dashed border-border">
-                  <Upload className="h-6 w-6 text-muted-foreground" />
-                </div>
-                <Button variant="outline" size="sm">Upload Logo</Button>
-              </div>
-              <div className="grid gap-4">
-                <div className="space-y-2">
-                  <Label>Store Name</Label>
-                  <Input placeholder="Your Store Name" />
-                </div>
-                <div className="space-y-2">
-                  <Label>Description</Label>
-                  <Textarea placeholder="Tell buyers about your store..." rows={3} />
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label>Email</Label>
-                    <Input type="email" placeholder="store@example.com" />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Phone</Label>
-                    <Input placeholder="+1 234 567 890" />
-                  </div>
-                </div>
-                <div className="space-y-2">
-                  <Label>Location</Label>
-                  <Input placeholder="City, Area, or Address" />
-                </div>
-                <div className="space-y-2">
-                  <Label>Website URL</Label>
-                  <Input placeholder="https://yourstore.com" />
-                </div>
-              </div>
-              <Button><Save className="h-4 w-4 mr-2" /> Save Profile</Button>
-            </div>
-          )}
 
           {/* Upload Tab */}
           {activeTab === "upload" && (
             <div className="bg-card rounded-lg border border-border p-6 space-y-5 max-w-2xl">
               <h2 className="text-xl font-bold text-foreground">Add New Product</h2>
-              <div className="w-full h-40 rounded-lg border-2 border-dashed border-border flex items-center justify-center bg-secondary/50">
-                <div className="text-center text-muted-foreground">
-                  <Upload className="h-8 w-8 mx-auto mb-2" />
-                  <p className="text-sm">Click to upload product images</p>
-                </div>
+              <input
+                ref={productFileInputRef}
+                type="file"
+                accept="image/*"
+                multiple
+                className="sr-only"
+                tabIndex={-1}
+                onChange={(e) => {
+                  handleProductFiles(e.target.files);
+                  e.target.value = "";
+                }}
+              />
+              <div className="space-y-3">
+                <p className="text-xs text-muted-foreground">
+                  Product images ({productImages.length}/{MAX_PRODUCT_IMAGES}) — click the area below to choose from your device.
+                </p>
+                <button
+                  type="button"
+                  disabled={productImages.length >= MAX_PRODUCT_IMAGES}
+                  onClick={() => productFileInputRef.current?.click()}
+                  aria-label={`Choose product images, up to ${MAX_PRODUCT_IMAGES} total`}
+                  className="w-full min-h-[160px] rounded-lg border-2 border-dashed border-border flex flex-col items-center justify-center gap-2 bg-secondary/50 text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground disabled:pointer-events-none disabled:opacity-50"
+                >
+                  <Upload className="h-8 w-8" />
+                  <span className="text-sm px-4 text-center">
+                    {productImages.length >= MAX_PRODUCT_IMAGES
+                      ? `Maximum ${MAX_PRODUCT_IMAGES} images selected`
+                      : "Click to upload product images"}
+                  </span>
+                </button>
+                {productImages.length > 0 && (
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3">
+                    {productImages.map((item, index) => (
+                      <div
+                        key={`${item.preview}-${index}`}
+                        className="relative aspect-square rounded-lg border border-border overflow-hidden bg-secondary group"
+                      >
+                        <img src={item.preview} alt="" className="h-full w-full object-cover" />
+                        <button
+                          type="button"
+                          onClick={() => removeProductImage(index)}
+                          className="absolute top-1 right-1 h-7 w-7 rounded-full bg-background/90 border border-border flex items-center justify-center shadow-sm opacity-90 hover:opacity-100"
+                          aria-label={`Remove image ${index + 1}`}
+                        >
+                          <X className="h-4 w-4" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
               <div className="grid gap-4">
                 <div className="space-y-2">
@@ -151,7 +284,9 @@ const SellerDashboard = () => {
                 </div>
               </div>
               <div className="flex gap-3">
-                <Button><Save className="h-4 w-4 mr-2" /> Publish</Button>
+                <Button>
+                  <Save className="h-4 w-4 mr-2" /> Publish
+                </Button>
                 <Button variant="outline">Save as Draft</Button>
               </div>
             </div>
@@ -168,8 +303,12 @@ const SellerDashboard = () => {
                     <p className="text-sm text-muted-foreground">$49.99 · 25% off · In Stock</p>
                   </div>
                   <div className="flex gap-2 shrink-0">
-                    <Button variant="ghost" size="icon"><Edit className="h-4 w-4" /></Button>
-                    <Button variant="ghost" size="icon" className="text-destructive"><Trash2 className="h-4 w-4" /></Button>
+                    <Button variant="ghost" size="icon">
+                      <Edit className="h-4 w-4" />
+                    </Button>
+                    <Button variant="ghost" size="icon" className="text-destructive">
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
                   </div>
                 </div>
               ))}

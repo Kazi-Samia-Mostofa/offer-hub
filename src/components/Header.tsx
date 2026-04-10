@@ -1,14 +1,33 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { Search, Menu, X, Bell, ChevronDown } from "lucide-react";
+import { Search, Menu, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import logo from "@/assets/Lookup_logo.png";
+import { supabase } from "@/supabaseClient";
+import type { Session } from "@supabase/supabase-js";
 
 const Header = () => {
   const [searchQuery, setSearchQuery] = useState("");
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [session, setSession] = useState<Session | null>(null);
   const navigate = useNavigate();
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session: s } }) => setSession(s));
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, s) => setSession(s));
+    return () => subscription.unsubscribe();
+  }, []);
+
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    setMobileMenuOpen(false);
+    navigate("/");
+  };
+
+  const isSeller = session?.user?.user_metadata?.role === "seller";
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
@@ -20,7 +39,6 @@ const Header = () => {
   return (
     <header className="sticky top-0 z-50 border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
       <div className="container flex h-20 items-center justify-between gap-4">
-        {/* Logo */}
         <Link to="/" className="flex items-center gap-2 shrink-0">
           <img src={logo} alt="LookUp" className="h-16 w-auto" />
         </Link>
@@ -40,16 +58,26 @@ const Header = () => {
         </form>
 
         {/* Desktop Nav */}
-        <nav className="hidden md:flex items-center gap-3">
-          <Link to="/droplist">
-            <Button variant="ghost" size="sm">Droplist</Button>
-          </Link>
-          <Link to="/login">
-            <Button variant="ghost" size="sm">Log In</Button>
-          </Link>
-          <Link to="/signup">
-            <Button size="sm" variant="default">Sign Up</Button>
-          </Link>
+        <nav className="hidden md:flex items-center gap-3 shrink-0">
+          {!isSeller && (
+            <Link to="/droplist">
+              <Button variant="ghost" size="sm">Droplist</Button>
+            </Link>
+          )}
+          {session ? (
+            <Button type="button" variant="outline" size="sm" onClick={handleLogout}>
+              Log out
+            </Button>
+          ) : (
+            <>
+              <Link to="/login">
+                <Button variant="ghost" size="sm">Log In</Button>
+              </Link>
+              <Link to="/signup">
+                <Button size="sm" variant="default">Sign Up</Button>
+              </Link>
+            </>
+          )}
         </nav>
 
         {/* Mobile Menu Toggle */}
@@ -77,12 +105,20 @@ const Header = () => {
             </div>
           </form>
           <div className="flex flex-col gap-2">
-            <Link to="/login" onClick={() => setMobileMenuOpen(false)}>
-              <Button variant="ghost" className="w-full justify-start">Log In</Button>
-            </Link>
-            <Link to="/signup" onClick={() => setMobileMenuOpen(false)}>
-              <Button className="w-full">Sign Up</Button>
-            </Link>
+            {session ? (
+              <Button type="button" variant="outline" className="w-full" onClick={handleLogout}>
+                Log out
+              </Button>
+            ) : (
+              <>
+                <Link to="/login" onClick={() => setMobileMenuOpen(false)}>
+                  <Button variant="ghost" className="w-full justify-start">Log In</Button>
+                </Link>
+                <Link to="/signup" onClick={() => setMobileMenuOpen(false)}>
+                  <Button className="w-full">Sign Up</Button>
+                </Link>
+              </>
+            )}
           </div>
         </div>
       )}

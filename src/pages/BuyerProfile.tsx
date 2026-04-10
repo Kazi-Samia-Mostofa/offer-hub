@@ -1,13 +1,25 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Bell, Heart, UserCheck, ChevronDown, Trash2 } from "lucide-react";
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import ProductCard from "@/components/ProductCard";
 import { trendingProducts, topStores } from "@/data/mockData";
+import { supabase } from "@/supabaseClient";
+
+function displayInitials(name: string) {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length >= 2) {
+    return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+  }
+  return name.slice(0, 2).toUpperCase() || "?";
+}
 
 const BuyerProfile = () => {
+  const [userName, setUserName] = useState("");
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<"droplist" | "following" | "notifications">("droplist");
   const [droplistProducts] = useState(trendingProducts.slice(0, 3));
   const [followedStores] = useState(topStores.slice(0, 2));
@@ -17,12 +29,33 @@ const BuyerProfile = () => {
     { id: 3, message: 'New offer from TechVibe — 30% off all accessories!', time: "3 days ago", read: true },
   ]);
 
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      if (!user) return;
+      const meta = user.user_metadata ?? {};
+      const fullName = typeof meta.full_name === "string" ? meta.full_name.trim() : "";
+      const name = fullName || user.email?.split("@")[0] || "Buyer";
+      setUserName(name);
+      const pic =
+        typeof meta.avatar_url === "string" && meta.avatar_url.length > 0 ? meta.avatar_url : null;
+      setAvatarUrl(pic);
+    });
+  }, []);
+
   return (
     <div className="min-h-screen flex flex-col">
       <Header />
       <main className="flex-1 bg-secondary/30 py-8">
         <div className="container">
-          <h1 className="text-3xl font-bold text-foreground mb-6">My Dashboard</h1>
+          <div className="flex items-center gap-4 mb-6">
+            <Avatar className="h-12 w-12 border-2 border-border shadow-sm">
+              {avatarUrl ? <AvatarImage src={avatarUrl} alt="" /> : null}
+              <AvatarFallback className="text-sm font-semibold bg-primary/10 text-primary">
+                {displayInitials(userName || "Buyer")}
+              </AvatarFallback>
+            </Avatar>
+            <h1 className="text-3xl font-bold text-foreground">{userName || "…"}</h1>
+          </div>
 
           {/* Tabs */}
           <div className="flex gap-2 mb-6 border-b border-border">

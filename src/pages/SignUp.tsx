@@ -1,14 +1,16 @@
 import { useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { Eye, EyeOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
-import logo from "@/assets/logo.jpeg";
+import logo from "@/assets/Lookup_logo.png";
+import { supabase } from "@/supabaseClient";
 
 const SignUp = () => {
+  const navigate = useNavigate();
   const [form, setForm] = useState({
     fullName: "",
     email: "",
@@ -19,30 +21,65 @@ const SignUp = () => {
   });
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
 
   const update = (field: string, value: string | boolean) =>
     setForm((prev) => ({ ...prev, [field]: value }));
 
-  const handleSignUp = (e: React.FormEvent) => {
+  const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault();
+    setError("");
+    setLoading(true);
+
     if (!form.fullName || !form.email || !form.password || !form.confirmPassword) {
       setError("Please fill in all fields.");
+      setLoading(false);
       return;
     }
     if (form.password !== form.confirmPassword) {
       setError("Passwords do not match.");
+      setLoading(false);
       return;
     }
     if (form.password.length < 8) {
       setError("Password must be at least 8 characters.");
+      setLoading(false);
       return;
     }
     if (!form.agreeTerms) {
       setError("You must agree to the Terms & Conditions.");
+      setLoading(false);
       return;
     }
-    setError("");
-    alert("Sign up functionality will be available once backend is connected.");
+
+    const { data, error: signUpError } = await supabase.auth.signUp({
+      email: form.email,
+      password: form.password,
+      options: {
+        data: {
+          full_name: form.fullName,
+          role: form.role,
+        },
+      },
+    });
+
+    if (signUpError) {
+      setError(signUpError.message);
+      setLoading(false);
+      return;
+    }
+
+    if (data.user) {
+      if (data.session) {
+        const r = data.user.user_metadata?.role as string | undefined;
+        if (r === "seller") navigate("/seller/setup");
+        else navigate("/buyer/dashboard");
+      } else {
+        alert("Sign up successful! Please check your email to verify your account.");
+        navigate("/login");
+      }
+    }
+    setLoading(false);
   };
 
   return (
@@ -151,7 +188,9 @@ const SignUp = () => {
               </span>
             </label>
 
-            <Button type="submit" className="w-full">Create Account</Button>
+            <Button type="submit" className="w-full" disabled={loading}>
+              {loading ? "Signing Up..." : "Create Account"}
+            </Button>
           </form>
 
           <div className="mt-6 text-center text-sm text-muted-foreground">

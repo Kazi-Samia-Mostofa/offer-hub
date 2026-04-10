@@ -8,6 +8,7 @@ import Login from "./pages/Login";
 import SignUp from "./pages/SignUp";
 import StoreProfile from "./pages/StoreProfile";
 import SellerDashboard from "./pages/SellerDashboard";
+import SellerStoreSetup from "./pages/SellerStoreSetup";
 import BuyerProfile from "./pages/BuyerProfile";
 import SearchResults from "./pages/SearchResults";
 import NotFound from "./pages/NotFound";
@@ -25,6 +26,7 @@ const App = () => (
           <Route path="/login" element={<Login />} />
           <Route path="/signup" element={<SignUp />} />
           <Route path="/store/:storeId" element={<StoreProfile />} />
+          <Route path="/seller/setup" element={<SellerStoreSetup />} />
           <Route path="/seller/dashboard" element={<SellerDashboard />} />
           <Route path="/buyer/dashboard" element={<BuyerProfile />} />
           <Route path="/search" element={<SearchResults />} />

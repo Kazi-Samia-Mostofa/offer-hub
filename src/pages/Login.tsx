@@ -1,28 +1,51 @@
 import { useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { Eye, EyeOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
-import logo from "@/assets/logo.jpeg";
+import logo from "@/assets/Lookup_logo.png";
+import { supabase } from "@/supabaseClient";
 
 const Login = () => {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+  const navigate = useNavigate();
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
+    setError("");
+    setLoading(true);
+
     if (!email || !password) {
       setError("Please fill in all fields.");
+      setLoading(false);
       return;
     }
-    setError("");
-    // TODO: integrate with backend
-    alert("Login functionality will be available once backend is connected.");
+
+    const { data, error: signInError } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    });
+
+    if (signInError) {
+      setError(signInError.message);
+      setLoading(false);
+      return;
+    }
+
+    const role = data.user?.user_metadata?.role as string | undefined;
+    if (role === "seller") {
+      navigate("/seller/setup");
+    } else {
+      navigate("/buyer/dashboard");
+    }
+    setLoading(false);
   };
 
   return (
@@ -79,7 +102,9 @@ const Login = () => {
               </div>
             </div>
 
-            <Button type="submit" className="w-full">Log In</Button>
+            <Button type="submit" className="w-full" disabled={loading}>
+              {loading ? "Logging In..." : "Log In"}
+            </Button>
           </form>
 
           <div className="mt-6 text-center text-sm text-muted-foreground">
