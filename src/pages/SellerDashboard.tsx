@@ -20,6 +20,18 @@ const SellerDashboard = () => {
   const [storeName, setStoreName] = useState("");
   const [storeLogoUrl, setStoreLogoUrl] = useState("");
   const [productImages, setProductImages] = useState<{ file: File; preview: string }[]>([]);
+  const [productForm, setProductForm] = useState({
+    name: "",
+    description: "",
+    category: "",
+    tags: "",
+    originalPrice: "",
+    discount: "",
+    stockStatus: "In Stock",
+  });
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [myProducts, setMyProducts] = useState<any[]>([]);
+  const [loadingProducts, setLoadingProducts] = useState(false);
   const productImagesRef = useRef(productImages);
   productImagesRef.current = productImages;
   const productFileInputRef = useRef<HTMLInputElement>(null);
@@ -62,6 +74,125 @@ const SellerDashboard = () => {
       if (removed) URL.revokeObjectURL(removed.preview);
       return next;
     });
+  };
+
+  const fetchMyProducts = async () => {
+    setLoadingProducts(true);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const { data, error } = await supabase
+        .from("products")
+        .select("*")
+        .eq("seller_id", user.id)
+        .order("created_at", { ascending: false });
+
+      if (error) throw error;
+      setMyProducts(data || []);
+    } catch (error) {
+      console.error("Error fetching products:", error);
+      toast.error("Failed to load products");
+    } finally {
+      setLoadingProducts(false);
+    }
+  };
+
+  useEffect(() => {
+    if (activeTab === "products") {
+      fetchMyProducts();
+    }
+  }, [activeTab]);
+
+  const handleSaveProduct = async (status: "published" | "draft") => {
+    if (!productForm.name.trim()) {
+      toast.error("Product name is required");
+      return;
+    }
+    if (!productForm.description.trim()) {
+      toast.error("Description is required");
+      return;
+    }
+    if (!productForm.category.trim()) {
+      toast.error("Category is required");
+      return;
+    }
+    if (!productForm.originalPrice) {
+      toast.error("Original price is required");
+      return;
+    }
+    if (productImages.length === 0) {
+      toast.error("At least one product image is required");
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error("Not authenticated");
+
+      // Upload images to Supabase Storage
+      const uploadedImageUrls: string[] = [];
+      for (const item of productImages) {
+        const fileExt = item.file.name.split('.').pop();
+        const fileName = `${user.id}/${Date.now()}-${Math.random().toString(36).substring(2)}.${fileExt}`;
+        const filePath = `product-images/${fileName}`;
+
+        const { error: uploadError } = await supabase.storage
+          .from("products")
+          .upload(filePath, item.file);
+
+        if (uploadError) throw uploadError;
+
+        const { data: { publicUrl } } = supabase.storage
+          .from("products")
+          .getPublicUrl(filePath);
+        
+        uploadedImageUrls.push(publicUrl);
+      }
+
+      const originalPrice = parseFloat(productForm.originalPrice) || 0;
+      const discount = parseFloat(productForm.discount) || 0;
+      const finalPrice = originalPrice * (1 - discount / 100);
+
+      const { error } = await supabase.from("products").insert({
+        seller_id: user.id,
+        name: productForm.name,
+        description: productForm.description,
+        category: productForm.category,
+        tags: productForm.tags.split(",").map(t => t.trim()).filter(t => t),
+        original_price: originalPrice,
+        discount_percent: discount,
+        final_price: finalPrice,
+        stock_status: productForm.stockStatus,
+        status: status,
+        image_urls: uploadedImageUrls,
+      });
+
+      if (error) throw error;
+
+      toast.success(status === "published" ? "Product published!" : "Product saved as draft");
+      
+      // Reset form
+      setProductForm({
+        name: "",
+        description: "",
+        category: "",
+        tags: "",
+        originalPrice: "",
+        discount: "",
+        stockStatus: "In Stock",
+      });
+      setProductImages([]);
+      
+      // Go to products tab
+      setActiveTab("products");
+    } catch (error: any) {
+      console.error("Error saving product:", error);
+      toast.error(error.message || "Failed to save product");
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   useEffect(() => {
@@ -240,43 +371,78 @@ const SellerDashboard = () => {
               <div className="grid gap-4">
                 <div className="space-y-2">
                   <Label>Product Name</Label>
-                  <Input placeholder="Product title" />
+                  <Input 
+                    placeholder="Product title" 
+                    value={productForm.name}
+                    onChange={(e) => setProductForm({ ...productForm, name: e.target.value })}
+                  />
                 </div>
                 <div className="space-y-2">
                   <Label>Description</Label>
-                  <Textarea placeholder="Describe your product..." rows={3} />
+                  <Textarea 
+                    placeholder="Describe your product..." 
+                    rows={3} 
+                    value={productForm.description}
+                    onChange={(e) => setProductForm({ ...productForm, description: e.target.value })}
+                  />
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label>Category</Label>
-                    <Input placeholder="e.g., Electronics" />
+                    <Input 
+                      placeholder="e.g., Electronics" 
+                      value={productForm.category}
+                      onChange={(e) => setProductForm({ ...productForm, category: e.target.value })}
+                    />
                   </div>
                   <div className="space-y-2">
                     <Label>Tags</Label>
-                    <Input placeholder="e.g., wireless, bluetooth" />
+                    <Input 
+                      placeholder="e.g., wireless, bluetooth" 
+                      value={productForm.tags}
+                      onChange={(e) => setProductForm({ ...productForm, tags: e.target.value })}
+                    />
                   </div>
-                </div>
-                <div className="space-y-2">
-                  <Label>Location</Label>
-                  <Input placeholder="City, Area, or Store Address" />
                 </div>
                 <div className="grid grid-cols-3 gap-4">
                   <div className="space-y-2">
                     <Label>Original Price ($)</Label>
-                    <Input type="number" placeholder="0.00" />
+                    <Input 
+                      type="number" 
+                      placeholder="0.00" 
+                      value={productForm.originalPrice}
+                      onChange={(e) => setProductForm({ ...productForm, originalPrice: e.target.value })}
+                    />
                   </div>
                   <div className="space-y-2">
                     <Label>Discount (%)</Label>
-                    <Input type="number" placeholder="0" />
+                    <Input 
+                      type="number" 
+                      placeholder="0" 
+                      value={productForm.discount}
+                      onChange={(e) => setProductForm({ ...productForm, discount: e.target.value })}
+                    />
                   </div>
                   <div className="space-y-2">
                     <Label>Final Price</Label>
-                    <Input disabled placeholder="Auto-calculated" />
+                    <Input 
+                      disabled 
+                      placeholder="Auto-calculated" 
+                      value={
+                        productForm.originalPrice 
+                          ? (parseFloat(productForm.originalPrice) * (1 - (parseFloat(productForm.discount) || 0) / 100)).toFixed(2)
+                          : ""
+                      }
+                    />
                   </div>
                 </div>
                 <div className="space-y-2">
                   <Label>Stock Status</Label>
-                  <select className="w-full h-10 rounded-md border border-input bg-background px-3 text-sm">
+                  <select 
+                    className="w-full h-10 rounded-md border border-input bg-background px-3 text-sm"
+                    value={productForm.stockStatus}
+                    onChange={(e) => setProductForm({ ...productForm, stockStatus: e.target.value })}
+                  >
                     <option>In Stock</option>
                     <option>Limited Stock</option>
                     <option>Out of Stock</option>
@@ -284,10 +450,12 @@ const SellerDashboard = () => {
                 </div>
               </div>
               <div className="flex gap-3">
-                <Button>
-                  <Save className="h-4 w-4 mr-2" /> Publish
+                <Button onClick={() => handleSaveProduct("published")} disabled={isSubmitting}>
+                  <Save className="h-4 w-4 mr-2" /> {isSubmitting ? "Publishing..." : "Publish"}
                 </Button>
-                <Button variant="outline">Save as Draft</Button>
+                <Button variant="outline" onClick={() => handleSaveProduct("draft")} disabled={isSubmitting}>
+                  Save as Draft
+                </Button>
               </div>
             </div>
           )}
@@ -295,23 +463,46 @@ const SellerDashboard = () => {
           {/* Products Tab */}
           {activeTab === "products" && (
             <div className="space-y-4">
-              {[1, 2, 3].map((i) => (
-                <div key={i} className="bg-card rounded-lg border border-border p-4 flex items-center gap-4">
-                  <div className="w-16 h-16 rounded-lg bg-secondary shrink-0" />
-                  <div className="flex-1 min-w-0">
-                    <h3 className="font-semibold text-foreground">Sample Product {i}</h3>
-                    <p className="text-sm text-muted-foreground">$49.99 · 25% off · In Stock</p>
-                  </div>
-                  <div className="flex gap-2 shrink-0">
-                    <Button variant="ghost" size="icon">
-                      <Edit className="h-4 w-4" />
-                    </Button>
-                    <Button variant="ghost" size="icon" className="text-destructive">
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </div>
+              {loadingProducts ? (
+                <p className="text-center py-8 text-muted-foreground">Loading products...</p>
+              ) : myProducts.length === 0 ? (
+                <div className="text-center py-12 bg-card rounded-lg border border-border">
+                  <Package className="h-12 w-12 text-muted-foreground mx-auto mb-3" />
+                  <p className="text-muted-foreground">No products found. Start by uploading one!</p>
+                  <Button variant="link" onClick={() => setActiveTab("upload")}>Upload Product</Button>
                 </div>
-              ))}
+              ) : (
+                myProducts.map((product) => (
+                  <div key={product.id} className="bg-card rounded-lg border border-border p-4 flex items-center gap-4">
+                    <div className="w-16 h-16 rounded-lg bg-secondary shrink-0 overflow-hidden flex items-center justify-center">
+                      {product.image_urls?.[0] ? (
+                        <img src={product.image_urls[0]} alt="" className="h-full w-full object-cover" />
+                      ) : (
+                        <Package className="h-6 w-6 text-muted-foreground" />
+                      )}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <h3 className="font-semibold text-foreground truncate">{product.name}</h3>
+                        {product.status === "draft" && (
+                          <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-secondary text-muted-foreground uppercase font-bold">Draft</span>
+                        )}
+                      </div>
+                      <p className="text-sm text-muted-foreground">
+                        ${product.final_price.toFixed(2)} · {product.discount_percent}% off · {product.stock_status}
+                      </p>
+                    </div>
+                    <div className="flex gap-2 shrink-0">
+                      <Button variant="ghost" size="icon">
+                        <Edit className="h-4 w-4" />
+                      </Button>
+                      <Button variant="ghost" size="icon" className="text-destructive">
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </div>
+                ))
+              )}
             </div>
           )}
         </div>
