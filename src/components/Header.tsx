@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import logo from "@/assets/Lookup_logo.png";
 import { supabase } from "@/supabaseClient";
 import type { Session } from "@supabase/supabase-js";
+import { toast } from "sonner";
 
 const Header = () => {
   const [searchQuery, setSearchQuery] = useState("");
@@ -36,6 +37,14 @@ const Header = () => {
     }
   };
 
+  const handleDroplistClick = (e: React.MouseEvent) => {
+    if (!session) {
+      e.preventDefault();
+      toast.error("Please log in to access your Droplist");
+      navigate("/login");
+    }
+  };
+
   return (
     <header className="sticky top-0 z-50 border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
       <div className="container flex h-20 items-center justify-between gap-4">
@@ -60,7 +69,7 @@ const Header = () => {
         {/* Desktop Nav */}
         <nav className="hidden md:flex items-center gap-3 shrink-0">
           {!isSeller && (
-            <Link to="/droplist">
+            <Link to="/droplist" onClick={handleDroplistClick}>
               <Button variant="ghost" size="sm">Droplist</Button>
             </Link>
           )}
@@ -105,6 +114,14 @@ const Header = () => {
             </div>
           </form>
           <div className="flex flex-col gap-2">
+            {!isSeller && (
+              <Link to="/droplist" onClick={(e) => {
+                setMobileMenuOpen(false);
+                handleDroplistClick(e);
+              }}>
+                <Button variant="ghost" className="w-full justify-start">Droplist</Button>
+              </Link>
+            )}
             {session ? (
               <Button type="button" variant="outline" className="w-full" onClick={handleLogout}>
                 Log out

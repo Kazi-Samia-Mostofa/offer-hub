@@ -47,13 +47,13 @@ const ProductCard = ({ product }: { product: Product }) => {
 
         <div className="flex items-center gap-1">
           <Star className="h-3 w-3 fill-warning text-warning" />
-          <span className="text-xs text-muted-foreground">{product.rating.toFixed(1)}</span>
+          <span className="text-xs text-muted-foreground">{(product.rating || 0).toFixed(1)}</span>
         </div>
 
         <div className="flex items-center gap-2">
-          <span className="text-lg font-bold text-primary">${product.offerPrice.toFixed(2)}</span>
+          <span className="text-lg font-bold text-primary">${(product.offerPrice || 0).toFixed(2)}</span>
           {product.discount > 0 && (
-            <span className="text-sm text-muted-foreground line-through">${product.price.toFixed(2)}</span>
+            <span className="text-sm text-muted-foreground line-through">${(product.price || 0).toFixed(2)}</span>
           )}
         </div>
 

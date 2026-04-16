@@ -32,6 +32,7 @@ const SellerDashboard = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [myProducts, setMyProducts] = useState<any[]>([]);
   const [loadingProducts, setLoadingProducts] = useState(false);
+  const [editingProductId, setEditingProductId] = useState<string | null>(null);
   const productImagesRef = useRef(productImages);
   productImagesRef.current = productImages;
   const productFileInputRef = useRef<HTMLInputElement>(null);
@@ -121,7 +122,8 @@ const SellerDashboard = () => {
       toast.error("Original price is required");
       return;
     }
-    if (productImages.length === 0) {
+    // Only require images for new products, or if images were selected for an existing one
+    if (!editingProductId && productImages.length === 0) {
       toast.error("At least one product image is required");
       return;
     }
@@ -131,31 +133,34 @@ const SellerDashboard = () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error("Not authenticated");
 
-      // Upload images to Supabase Storage
-      const uploadedImageUrls: string[] = [];
-      for (const item of productImages) {
-        const fileExt = item.file.name.split('.').pop();
-        const fileName = `${user.id}/${Date.now()}-${Math.random().toString(36).substring(2)}.${fileExt}`;
-        const filePath = `product-images/${fileName}`;
+      let uploadedImageUrls: string[] = [];
+      
+      // Upload new images if any were selected
+      if (productImages.length > 0) {
+        for (const item of productImages) {
+          const fileExt = item.file.name.split('.').pop();
+          const fileName = `${user.id}/${Date.now()}-${Math.random().toString(36).substring(2)}.${fileExt}`;
+          const filePath = `product-images/${fileName}`;
 
-        const { error: uploadError } = await supabase.storage
-          .from("products")
-          .upload(filePath, item.file);
+          const { error: uploadError } = await supabase.storage
+            .from("products")
+            .upload(filePath, item.file);
 
-        if (uploadError) throw uploadError;
+          if (uploadError) throw uploadError;
 
-        const { data: { publicUrl } } = supabase.storage
-          .from("products")
-          .getPublicUrl(filePath);
-        
-        uploadedImageUrls.push(publicUrl);
+          const { data: { publicUrl } } = supabase.storage
+            .from("products")
+            .getPublicUrl(filePath);
+          
+          uploadedImageUrls.push(publicUrl);
+        }
       }
 
       const originalPrice = parseFloat(productForm.originalPrice) || 0;
       const discount = parseFloat(productForm.discount) || 0;
       const finalPrice = originalPrice * (1 - discount / 100);
 
-      const { error } = await supabase.from("products").insert({
+      const productData: any = {
         seller_id: user.id,
         name: productForm.name,
         description: productForm.description,
@@ -166,14 +171,31 @@ const SellerDashboard = () => {
         final_price: finalPrice,
         stock_status: productForm.stockStatus,
         status: status,
-        image_urls: uploadedImageUrls,
-      });
+      };
 
-      if (error) throw error;
+      // Only update image_urls if new images were uploaded
+      if (uploadedImageUrls.length > 0) {
+        productData.image_urls = uploadedImageUrls;
+      }
 
-      toast.success(status === "published" ? "Product published!" : "Product saved as draft");
+      if (editingProductId) {
+        // Update existing product
+        const { error } = await supabase
+          .from("products")
+          .update(productData)
+          .eq("id", editingProductId);
+        if (error) throw error;
+        toast.success("Product updated successfully!");
+      } else {
+        // Insert new product
+        const { error } = await supabase
+          .from("products")
+          .insert({ ...productData, image_urls: productData.image_urls || [] });
+        if (error) throw error;
+        toast.success(status === "published" ? "Product published!" : "Product saved as draft");
+      }
       
-      // Reset form
+      // Reset form and state
       setProductForm({
         name: "",
         description: "",
@@ -184,14 +206,50 @@ const SellerDashboard = () => {
         stockStatus: "In Stock",
       });
       setProductImages([]);
+      setEditingProductId(null);
       
       // Go to products tab
       setActiveTab("products");
+      fetchMyProducts();
     } catch (error: any) {
       console.error("Error saving product:", error);
       toast.error(error.message || "Failed to save product");
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  const handleEditProduct = (product: any) => {
+    setProductForm({
+      name: product.name,
+      description: product.description || "",
+      category: product.category || "",
+      tags: product.tags ? product.tags.join(", ") : "",
+      originalPrice: product.original_price.toString(),
+      discount: product.discount_percent.toString(),
+      stockStatus: product.stock_status,
+    });
+    setEditingProductId(product.id);
+    setActiveTab("upload");
+    // Note: Existing images won't be in the productImages state (which handles new file uploads)
+    // but the DB update logic handles this by only updating image_urls if new ones are uploaded.
+  };
+
+  const handleDeleteProduct = async (id: string) => {
+    if (!confirm("Are you sure you want to delete this product?")) return;
+
+    try {
+      const { error } = await supabase
+        .from("products")
+        .delete()
+        .eq("id", id);
+
+      if (error) throw error;
+      toast.success("Product deleted successfully");
+      fetchMyProducts();
+    } catch (error: any) {
+      console.error("Error deleting product:", error);
+      toast.error(error.message || "Failed to delete product");
     }
   };
 
@@ -316,7 +374,33 @@ const SellerDashboard = () => {
           {/* Upload Tab */}
           {activeTab === "upload" && (
             <div className="bg-card rounded-lg border border-border p-6 space-y-5 max-w-2xl">
-              <h2 className="text-xl font-bold text-foreground">Add New Product</h2>
+              <div className="flex items-center justify-between">
+                <h2 className="text-xl font-bold text-foreground">
+                  {editingProductId ? "Edit Product" : "Add New Product"}
+                </h2>
+                {editingProductId && (
+                  <Button 
+                    variant="ghost" 
+                    size="sm" 
+                    onClick={() => {
+                      setEditingProductId(null);
+                      setProductForm({
+                        name: "",
+                        description: "",
+                        category: "",
+                        tags: "",
+                        originalPrice: "",
+                        discount: "",
+                        stockStatus: "In Stock",
+                      });
+                      setProductImages([]);
+                      setActiveTab("products");
+                    }}
+                  >
+                    Cancel Edit
+                  </Button>
+                )}
+              </div>
               <input
                 ref={productFileInputRef}
                 type="file"
@@ -451,11 +535,14 @@ const SellerDashboard = () => {
               </div>
               <div className="flex gap-3">
                 <Button onClick={() => handleSaveProduct("published")} disabled={isSubmitting}>
-                  <Save className="h-4 w-4 mr-2" /> {isSubmitting ? "Publishing..." : "Publish"}
+                  <Save className="h-4 w-4 mr-2" /> 
+                  {isSubmitting ? (editingProductId ? "Updating..." : "Publishing...") : (editingProductId ? "Update Product" : "Publish")}
                 </Button>
-                <Button variant="outline" onClick={() => handleSaveProduct("draft")} disabled={isSubmitting}>
-                  Save as Draft
-                </Button>
+                {!editingProductId && (
+                  <Button variant="outline" onClick={() => handleSaveProduct("draft")} disabled={isSubmitting}>
+                    Save as Draft
+                  </Button>
+                )}
               </div>
             </div>
           )}
@@ -493,10 +580,10 @@ const SellerDashboard = () => {
                       </p>
                     </div>
                     <div className="flex gap-2 shrink-0">
-                      <Button variant="ghost" size="icon">
+                      <Button variant="ghost" size="icon" onClick={() => handleEditProduct(product)}>
                         <Edit className="h-4 w-4" />
                       </Button>
-                      <Button variant="ghost" size="icon" className="text-destructive">
+                      <Button variant="ghost" size="icon" className="text-destructive" onClick={() => handleDeleteProduct(product.id)}>
                         <Trash2 className="h-4 w-4" />
                       </Button>
                     </div>

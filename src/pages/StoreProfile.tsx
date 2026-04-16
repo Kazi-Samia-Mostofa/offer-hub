@@ -1,12 +1,13 @@
-import { useState, useMemo } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useParams, Link } from "react-router-dom";
-import { Star, Users, Package, ExternalLink, UserPlus, MessageCircle, Share2, ChevronLeft, ChevronRight } from "lucide-react";
+import { Star, Package, ExternalLink, UserPlus, MessageCircle, Share2, ChevronLeft, ChevronRight, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import ProductCard from "@/components/ProductCard";
 import { topStores, storeProducts } from "@/data/mockData";
+import { supabase } from "@/supabaseClient";
 
 const PRODUCTS_PER_PAGE = 10;
 
@@ -15,23 +16,112 @@ const StoreProfile = () => {
   const [page, setPage] = useState(1);
   const [sortBy, setSortBy] = useState("popular");
   const [following, setFollowing] = useState(false);
+  const [storeData, setStoreData] = useState<any>(null);
+  const [dbProducts, setDbProducts] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const store = topStores.find((s) => s.id === storeId) || topStores[0];
-  const products = storeProducts.filter((p) => p.storeId === store.id);
+  useEffect(() => {
+    const fetchStoreAndProducts = async () => {
+      setLoading(true);
+      try {
+        // 1. Check if it's a mock store first
+        const mockStore = topStores.find((s) => s.id === storeId);
+        
+        // 2. Fetch from Supabase
+        const { data: profile, error: profileError } = await supabase
+          .from("seller_profiles")
+          .select("*")
+          .eq("id", storeId)
+          .single();
+
+        const { data: products, error: productsError } = await supabase
+          .from("products")
+          .select("*")
+          .eq("seller_id", storeId)
+          .eq("status", "published");
+
+        if (profile) {
+          setStoreData({
+            id: profile.id,
+            name: profile.store_name,
+            image: profile.logo_url || "",
+            description: profile.description,
+            rating: profile.rating || "N/A",
+            location: profile.location,
+            isDb: true
+          });
+        } else if (mockStore) {
+          setStoreData(mockStore);
+        }
+
+        if (products) {
+          const transformed = products.map(p => ({
+            id: p.id,
+            name: p.name,
+            image: p.image_urls?.[0] || "/placeholder.svg",
+            price: p.original_price || 0,
+            offerPrice: p.final_price || 0,
+            discount: p.discount_percent || 0,
+            storeName: profile?.store_name || "Unknown Store",
+            storeId: p.seller_id,
+            rating: p.rating || 0,
+            views: p.views || 0
+          }));
+          setDbProducts(transformed);
+        }
+      } catch (error) {
+        console.error("Error fetching store profile:", error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchStoreAndProducts();
+  }, [storeId]);
+
+  const allProducts = useMemo(() => {
+    const mockFiltered = storeProducts.filter((p) => p.storeId === storeId);
+    return [...dbProducts, ...mockFiltered];
+  }, [dbProducts, storeId]);
 
   const sorted = useMemo(() => {
-    const arr = [...products];
+    const arr = [...allProducts];
     switch (sortBy) {
       case "price-low": return arr.sort((a, b) => a.offerPrice - b.offerPrice);
       case "price-high": return arr.sort((a, b) => b.offerPrice - a.offerPrice);
       case "discount": return arr.sort((a, b) => b.discount - a.discount);
-      default: return arr.sort((a, b) => b.views - a.views);
+      default: return arr.sort((a, b) => (b.views || 0) - (a.views || 0));
     }
-  }, [products, sortBy]);
+  }, [allProducts, sortBy]);
 
   const totalPages = Math.ceil(sorted.length / PRODUCTS_PER_PAGE);
   const paginated = sorted.slice((page - 1) * PRODUCTS_PER_PAGE, page * PRODUCTS_PER_PAGE);
   const exclusive = sorted.slice(0, 3);
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex flex-col">
+        <Header />
+        <div className="flex-1 flex items-center justify-center">
+          <Loader2 className="h-10 w-10 text-primary animate-spin" />
+        </div>
+        <Footer />
+      </div>
+    );
+  }
+
+  if (!storeData) {
+    return (
+      <div className="min-h-screen flex flex-col">
+        <Header />
+        <div className="flex-1 flex flex-col items-center justify-center">
+          <h2 className="text-2xl font-bold mb-4">Store not found</h2>
+          <Link to="/"><Button>Back to Home</Button></Link>
+        </div>
+        <Footer />
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen flex flex-col">
@@ -40,29 +130,31 @@ const StoreProfile = () => {
         {/* Store Header */}
         <section className="bg-gradient-to-r from-primary/10 to-accent/20 py-12">
           <div className="container flex flex-col md:flex-row items-center gap-6">
-            <img
-              src={store.image}
-              alt={store.name}
-              className="w-28 h-28 rounded-full border-4 border-primary/30 object-cover"
-            />
+            <div className="w-28 h-28 rounded-full bg-secondary flex items-center justify-center overflow-hidden border-4 border-primary/30 shrink-0">
+              {storeData.image ? (
+                <img src={storeData.image} alt={storeData.name} className="w-full h-full object-cover" />
+              ) : (
+                <Package className="h-10 w-10 text-muted-foreground" />
+              )}
+            </div>
             <div className="flex-1 text-center md:text-left">
               <div className="flex items-center justify-center md:justify-start gap-2">
-                <h1 className="text-3xl font-bold text-foreground">{store.name}</h1>
+                <h1 className="text-3xl font-bold text-foreground">{storeData.name}</h1>
                 <a href="#" className="text-primary hover:text-primary/80">
                   <ExternalLink className="h-5 w-5" />
                 </a>
               </div>
-              <p className="text-muted-foreground mt-1">{store.description}</p>
+              <p className="text-muted-foreground mt-1 line-clamp-2">{storeData.description || "No description available"}</p>
               <div className="flex items-center justify-center md:justify-start gap-6 mt-3 text-sm text-muted-foreground">
                 <span className="flex items-center gap-1">
-                  <Star className="h-4 w-4 fill-warning text-warning" /> {store.rating}
+                  <Star className="h-4 w-4 fill-warning text-warning" /> {storeData.rating}
                 </span>
                 <span className="flex items-center gap-1">
-                  <Users className="h-4 w-4" /> {(store.followers / 1000).toFixed(0)}k followers
+                  <Package className="h-4 w-4" /> {allProducts.length} products
                 </span>
-                <span className="flex items-center gap-1">
-                  <Package className="h-4 w-4" /> {store.products} products
-                </span>
+                {storeData.location && (
+                  <span className="text-muted-foreground italic">{storeData.location}</span>
+                )}
               </div>
             </div>
             <div className="flex gap-3">
@@ -84,16 +176,18 @@ const StoreProfile = () => {
         </section>
 
         {/* Exclusive Products */}
-        <section className="py-8 bg-accent/10">
-          <div className="container">
-            <h2 className="text-xl font-bold text-foreground mb-4">✨ Exclusive Products</h2>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              {exclusive.map((p) => (
-                <ProductCard key={p.id} product={p} />
-              ))}
+        {exclusive.length > 0 && (
+          <section className="py-8 bg-accent/10">
+            <div className="container">
+              <h2 className="text-xl font-bold text-foreground mb-4">✨ Featured Products</h2>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                {exclusive.map((p, idx) => (
+                  <ProductCard key={p.id + idx} product={p} />
+                ))}
+              </div>
             </div>
-          </div>
-        </section>
+          </section>
+        )}
 
         {/* All Products */}
         <section className="py-8">
@@ -113,11 +207,15 @@ const StoreProfile = () => {
               </Select>
             </div>
 
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
-              {paginated.map((p) => (
-                <ProductCard key={p.id} product={p} />
-              ))}
-            </div>
+            {paginated.length > 0 ? (
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
+                {paginated.map((p, idx) => (
+                  <ProductCard key={p.id + idx} product={p} />
+                ))}
+              </div>
+            ) : (
+              <p className="text-center py-12 text-muted-foreground">No products found for this store.</p>
+            )}
 
             {/* Pagination */}
             {totalPages > 1 && (
