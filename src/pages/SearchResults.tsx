@@ -54,7 +54,7 @@ const SearchResults = () => {
 
         const { data: dbProducts } = await supabase
           .from("products")
-          .select("*, seller_profiles(store_name)")
+          .select("*, seller_profiles(store_name, store_type)")
           .or(`name.ilike."${queryPattern}",category.ilike."${queryPattern}",description.ilike."${queryPattern}"`)
           .eq("status", "published");
 
@@ -69,7 +69,8 @@ const SearchResults = () => {
           storeName: p.seller_profiles?.store_name || "Unknown Store",
           storeId: p.seller_id,
           rating: p.rating || 0,
-          views: p.views || 0
+          views: p.views || 0,
+          isOffline: p.seller_profiles?.store_type === "offline"
         }));
 
         const transformedDbStores = (dbStores || []).map(s => ({
@@ -78,7 +79,8 @@ const SearchResults = () => {
           image: s.logo_url || "",
           rating: s.rating || "N/A",
           location: s.location || "No Location",
-          isDb: true
+          isDb: true,
+          isOffline: s.store_type === "offline"
         }));
 
         // 4. Merge and Set Data
@@ -135,7 +137,7 @@ const SearchResults = () => {
                       <Link
                         key={store.id}
                         to={`/store/${store.id}`}
-                        className="bg-card rounded-lg border border-border p-4 flex items-center gap-3 hover:shadow-md transition-shadow"
+                        className="bg-card rounded-xl border border-border p-4 flex items-center gap-3 hover:shadow-lg transition-shadow"
                       >
                         <div className="w-12 h-12 rounded-full bg-secondary flex items-center justify-center overflow-hidden shrink-0">
                           {store.image ? (
@@ -144,11 +146,23 @@ const SearchResults = () => {
                             <Package className="h-6 w-6 text-muted-foreground" />
                           )}
                         </div>
-                        <div>
+                        <div className="flex-1 min-w-0">
                           <h3 className="font-bold text-foreground">{store.name}</h3>
-                          <div className="flex gap-3 text-xs text-muted-foreground">
-                            <span className="flex items-center gap-1"><Star className="h-3 w-3 fill-warning text-warning" />{store.rating}</span>
-                            <span className="flex items-center gap-1"><Package className="h-3 w-3" />{store.location || (store.products + " products")}</span>
+                          <div className="flex items-center gap-2 mt-1">
+                            {/* Online/Offline Badge */}
+                            <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${
+                              store.isOffline 
+                                ? "bg-blue-50 text-blue-600 border border-blue-100" 
+                                : "bg-green-50 text-green-600 border border-green-100"
+                            }`}>
+                              {store.isOffline ? "Offline Store" : "Online Store"}
+                            </span>
+                            <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                              <Star className="h-3 w-3 fill-warning text-warning" />{store.rating}
+                            </span>
+                            <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                              <Package className="h-3 w-3" />{store.location || (store.products + " products")}
+                            </span>
                           </div>
                         </div>
                       </Link>

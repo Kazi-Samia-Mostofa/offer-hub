@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from "react";
 import { useParams, Link } from "react-router-dom";
-import { Star, Package, ExternalLink, UserPlus, MessageCircle, Share2, ChevronLeft, ChevronRight, Loader2 } from "lucide-react";
+import { Star, Package, ExternalLink, UserPlus, MessageCircle, Share2, ChevronLeft, ChevronRight, Loader2, Globe, Link as LinkIcon, MapPin } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import Header from "@/components/Header";
@@ -36,7 +36,7 @@ const StoreProfile = () => {
 
         const { data: products, error: productsError } = await supabase
           .from("products")
-          .select("*")
+          .select("*, seller_profiles!inner(store_type)")
           .eq("seller_id", storeId)
           .eq("status", "published");
 
@@ -47,11 +47,18 @@ const StoreProfile = () => {
             image: profile.logo_url || "",
             description: profile.description,
             rating: profile.rating || "N/A",
-            location: profile.location,
-            isDb: true
+            location: profile.location || "Dhaka, Bangladesh",
+            isDb: true,
+            isOffline: profile.store_type === "offline",
+            website: profile.website_url || "https://example.com",
+            facebook: profile.facebook_url || "https://facebook.com/example"
           });
         } else if (mockStore) {
-          setStoreData(mockStore);
+          setStoreData({
+            ...mockStore,
+            website: mockStore.website || "https://example.com",
+            facebook: mockStore.facebook || "https://facebook.com/example"
+          });
         }
 
         if (products) {
@@ -65,7 +72,8 @@ const StoreProfile = () => {
             storeName: profile?.store_name || "Unknown Store",
             storeId: p.seller_id,
             rating: p.rating || 0,
-            views: p.views || 0
+            views: p.views || 0,
+            isOffline: p.seller_profiles?.store_type === "offline"
           }));
           setDbProducts(transformed);
         }
@@ -140,6 +148,14 @@ const StoreProfile = () => {
             <div className="flex-1 text-center md:text-left">
               <div className="flex items-center justify-center md:justify-start gap-2">
                 <h1 className="text-3xl font-bold text-foreground">{storeData.name}</h1>
+                {/* Online/Offline Badge */}
+                <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-bold uppercase ${
+                  storeData.isOffline 
+                    ? "bg-blue-50 text-blue-600 border border-blue-100" 
+                    : "bg-green-50 text-green-600 border border-green-100"
+                }`}>
+                  {storeData.isOffline ? "Offline Store" : "Online Store"}
+                </span>
                 <a href="#" className="text-primary hover:text-primary/80">
                   <ExternalLink className="h-5 w-5" />
                 </a>
@@ -157,7 +173,29 @@ const StoreProfile = () => {
                 )}
               </div>
             </div>
-            <div className="flex gap-3">
+            <div className="flex flex-col sm:flex-row gap-3">
+              {/* CTA Buttons */}
+              {!storeData.isOffline ? (
+                storeData.website ? (
+                  <Button asChild>
+                    <a href={storeData.website} target="_blank" rel="noopener noreferrer">
+                      <Globe className="h-4 w-4 mr-2" /> Visit Website
+                    </a>
+                  </Button>
+                ) : storeData.facebook ? (
+                  <Button className="bg-blue-600 hover:bg-blue-700" asChild>
+                    <a href={storeData.facebook} target="_blank" rel="noopener noreferrer">
+                      <LinkIcon className="h-4 w-4 mr-2" /> Visit Facebook Page
+                    </a>
+                  </Button>
+                ) : null
+              ) : (
+                <div className="flex items-center gap-2 text-sm text-blue-700">
+                  <MapPin className="h-4 w-4" /> {storeData.location}
+                </div>
+              )}
+              
+              {/* Follow/Contact Buttons */}
               <Button
                 variant={following ? "secondary" : "default"}
                 onClick={() => setFollowing(!following)}

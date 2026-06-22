@@ -11,6 +11,7 @@ import SellerDashboard from "./pages/SellerDashboard";
 import SellerStoreSetup from "./pages/SellerStoreSetup";
 import BuyerProfile from "./pages/BuyerProfile";
 import SearchResults from "./pages/SearchResults";
+import ProductDetails from "./pages/ProductDetails";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -26,6 +27,7 @@ const App = () => (
           <Route path="/login" element={<Login />} />
           <Route path="/signup" element={<SignUp />} />
           <Route path="/store/:storeId" element={<StoreProfile />} />
+          <Route path="/product/:productId" element={<ProductDetails />} />
           <Route path="/seller/setup" element={<SellerStoreSetup />} />
           <Route path="/seller/dashboard" element={<SellerDashboard />} />
           <Route path="/buyer/dashboard" element={<BuyerProfile />} />

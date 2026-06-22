@@ -12,6 +12,7 @@ export const trendingProducts: Product[] = [
     storeId: "store-1",
     rating: 4.8,
     views: 12500,
+    isOffline: false,
   },
   {
     id: "2",
@@ -24,6 +25,7 @@ export const trendingProducts: Product[] = [
     storeId: "store-2",
     rating: 4.6,
     views: 9800,
+    isOffline: true,
   },
   {
     id: "3",
@@ -36,6 +38,7 @@ export const trendingProducts: Product[] = [
     storeId: "store-3",
     rating: 4.9,
     views: 15200,
+    isOffline: false,
   },
   {
     id: "4",
@@ -48,6 +51,7 @@ export const trendingProducts: Product[] = [
     storeId: "store-1",
     rating: 4.7,
     views: 11000,
+    isOffline: false,
   },
   {
     id: "5",
@@ -60,6 +64,7 @@ export const trendingProducts: Product[] = [
     storeId: "store-4",
     rating: 4.5,
     views: 8700,
+    isOffline: true,
   },
 ];
 
@@ -72,6 +77,9 @@ export const topStores = [
     followers: 25000,
     products: 156,
     description: "Premium tech gadgets and accessories",
+    isOffline: false,
+    website: "https://techvibe.example.com",
+    facebook: "https://facebook.com/techvibe"
   },
   {
     id: "store-2",
@@ -81,6 +89,10 @@ export const topStores = [
     followers: 18000,
     products: 98,
     description: "Athletic wear and sports equipment",
+    isOffline: true,
+    location: "123 Sports Avenue, Dhaka",
+    website: "https://sportzone.example.com",
+    facebook: "https://facebook.com/sportzone"
   },
   {
     id: "store-3",
@@ -90,6 +102,9 @@ export const topStores = [
     followers: 32000,
     products: 210,
     description: "Organic beauty and skincare products",
+    isOffline: false,
+    website: "https://glowupbeauty.example.com",
+    facebook: "https://facebook.com/glowupbeauty"
   },
   {
     id: "store-4",
@@ -99,6 +114,10 @@ export const topStores = [
     followers: 14000,
     products: 75,
     description: "Trendy fashion and lifestyle accessories",
+    isOffline: true,
+    location: "456 Fashion Street, Dhaka",
+    website: "https://urbanstyle.example.com",
+    facebook: "https://facebook.com/urbanstyle"
   },
 ];
 

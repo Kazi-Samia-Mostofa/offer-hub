@@ -24,13 +24,23 @@ const TopStores = () => {
           image: s.logo_url,
           rating: s.rating || "N/A",
           location: s.location || "No Location",
-          description: s.description
+          description: s.description,
+          isOffline: s.store_type === "offline"
         }));
 
-        setStores([...transformedDbStores, ...mockStores]);
+        const transformedMockStores = mockStores.map((s, idx) => ({
+          ...s,
+          isOffline: idx % 2 === 1 // Alternate mock stores for variety
+        }));
+
+        setStores([...transformedDbStores, ...transformedMockStores]);
       } catch (error) {
         console.error("Error fetching top stores:", error);
-        setStores(mockStores);
+        const transformedMockStores = mockStores.map((s, idx) => ({
+          ...s,
+          isOffline: idx % 2 === 1 // Alternate mock stores for variety
+        }));
+        setStores(transformedMockStores);
       } finally {
         setLoading(false);
       }
@@ -57,7 +67,7 @@ const TopStores = () => {
               <Link
                 key={store.id + idx}
                 to={`/store/${store.id}`}
-                className="group bg-card rounded-lg border border-border p-6 text-center hover:shadow-lg hover:-translate-y-1 transition-all"
+                className="group bg-card rounded-2xl border border-border p-6 text-center hover:shadow-xl hover:-translate-y-2 transition-all"
               >
                 <div className="w-20 h-20 rounded-full mx-auto bg-secondary flex items-center justify-center overflow-hidden border-4 border-primary/20 group-hover:border-primary/50 transition-colors">
                   {store.image ? (
@@ -72,7 +82,19 @@ const TopStores = () => {
                   )}
                 </div>
                 <h3 className="mt-4 font-bold text-card-foreground text-lg">{store.name}</h3>
-                <p className="text-sm text-muted-foreground mt-1 line-clamp-2">{store.description || "No description available"}</p>
+                
+                {/* Online/Offline Badge */}
+                <div className="flex justify-center mt-2">
+                  <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${
+                    store.isOffline 
+                      ? "bg-blue-50 text-blue-600 border border-blue-100" 
+                      : "bg-green-50 text-green-600 border border-green-100"
+                  }`}>
+                    {store.isOffline ? "Offline Store" : "Online Store"}
+                  </span>
+                </div>
+                
+                <p className="text-sm text-muted-foreground mt-3 line-clamp-2">{store.description || "No description available"}</p>
 
                 <div className="flex justify-center gap-4 mt-4 text-xs text-muted-foreground">
                   <span className="flex items-center gap-1">

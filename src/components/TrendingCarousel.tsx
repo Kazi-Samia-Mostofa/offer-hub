@@ -15,7 +15,7 @@ const TrendingCarousel = () => {
       try {
         const { data, error } = await supabase
           .from("products")
-          .select("*, seller_profiles(store_name)")
+          .select("*, seller_profiles(store_name, store_type)")
           .eq("status", "published")
           .order("created_at", { ascending: false })
           .limit(5);
@@ -32,7 +32,8 @@ const TrendingCarousel = () => {
           storeName: p.seller_profiles?.store_name || "Unknown Store",
           storeId: p.seller_id,
           rating: p.rating || 0,
-          views: p.views || 0
+          views: p.views || 0,
+          isOffline: p.seller_profiles?.store_type === "offline"
         }));
 
         setProducts([...transformedDb, ...mockProducts]);

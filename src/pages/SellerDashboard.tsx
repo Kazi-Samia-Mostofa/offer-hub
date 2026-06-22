@@ -19,6 +19,7 @@ const SellerDashboard = () => {
   const [gateLoading, setGateLoading] = useState(true);
   const [storeName, setStoreName] = useState("");
   const [storeLogoUrl, setStoreLogoUrl] = useState("");
+  const [storeType, setStoreType] = useState<"online" | "offline">("online");
   const [productImages, setProductImages] = useState<{ file: File; preview: string }[]>([]);
   const [productForm, setProductForm] = useState({
     name: "",
@@ -33,6 +34,7 @@ const SellerDashboard = () => {
   const [myProducts, setMyProducts] = useState<any[]>([]);
   const [loadingProducts, setLoadingProducts] = useState(false);
   const [editingProductId, setEditingProductId] = useState<string | null>(null);
+  const [existingProductImages, setExistingProductImages] = useState<string[]>([]);
   const productImagesRef = useRef(productImages);
   productImagesRef.current = productImages;
   const productFileInputRef = useRef<HTMLInputElement>(null);
@@ -123,7 +125,7 @@ const SellerDashboard = () => {
       return;
     }
     // Only require images for new products, or if images were selected for an existing one
-    if (!editingProductId && productImages.length === 0) {
+    if (!editingProductId && (existingProductImages.length + productImages.length) === 0) {
       toast.error("At least one product image is required");
       return;
     }
@@ -171,12 +173,9 @@ const SellerDashboard = () => {
         final_price: finalPrice,
         stock_status: productForm.stockStatus,
         status: status,
+        image_urls: [...existingProductImages, ...uploadedImageUrls],
+        is_offline: storeType === "offline",
       };
-
-      // Only update image_urls if new images were uploaded
-      if (uploadedImageUrls.length > 0) {
-        productData.image_urls = uploadedImageUrls;
-      }
 
       if (editingProductId) {
         // Update existing product
@@ -206,6 +205,7 @@ const SellerDashboard = () => {
         stockStatus: "In Stock",
       });
       setProductImages([]);
+      setExistingProductImages([]);
       setEditingProductId(null);
       
       // Go to products tab
@@ -229,10 +229,10 @@ const SellerDashboard = () => {
       discount: product.discount_percent.toString(),
       stockStatus: product.stock_status,
     });
+    setExistingProductImages(product.image_urls || []);
+    setProductImages([]);
     setEditingProductId(product.id);
     setActiveTab("upload");
-    // Note: Existing images won't be in the productImages state (which handles new file uploads)
-    // but the DB update logic handles this by only updating image_urls if new ones are uploaded.
   };
 
   const handleDeleteProduct = async (id: string) => {
@@ -275,7 +275,7 @@ const SellerDashboard = () => {
 
       const { data, error } = await supabase
         .from("seller_profiles")
-        .select("store_name, description, email, phone, location, logo_url")
+        .select("store_name, description, email, phone, location, logo_url, store_type")
         .eq("user_id", user.id)
         .maybeSingle();
 
@@ -293,6 +293,7 @@ const SellerDashboard = () => {
 
       setStoreName(data.store_name?.trim() || "Store");
       setStoreLogoUrl((data.logo_url ?? "").trim());
+      setStoreType((data.store_type as "online" | "offline") || "online");
       setGateLoading(false);
     }
 
@@ -394,6 +395,7 @@ const SellerDashboard = () => {
                         stockStatus: "In Stock",
                       });
                       setProductImages([]);
+                      setExistingProductImages([]);
                       setActiveTab("products");
                     }}
                   >
@@ -415,27 +417,47 @@ const SellerDashboard = () => {
               />
               <div className="space-y-3">
                 <p className="text-xs text-muted-foreground">
-                  Product images ({productImages.length}/{MAX_PRODUCT_IMAGES}) — click the area below to choose from your device.
+                  Product images ({(existingProductImages.length + productImages.length)}/{MAX_PRODUCT_IMAGES}) — click the area below to choose from your device.
                 </p>
                 <button
                   type="button"
-                  disabled={productImages.length >= MAX_PRODUCT_IMAGES}
+                  disabled={(existingProductImages.length + productImages.length) >= MAX_PRODUCT_IMAGES}
                   onClick={() => productFileInputRef.current?.click()}
                   aria-label={`Choose product images, up to ${MAX_PRODUCT_IMAGES} total`}
                   className="w-full min-h-[160px] rounded-lg border-2 border-dashed border-border flex flex-col items-center justify-center gap-2 bg-secondary/50 text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground disabled:pointer-events-none disabled:opacity-50"
                 >
                   <Upload className="h-8 w-8" />
                   <span className="text-sm px-4 text-center">
-                    {productImages.length >= MAX_PRODUCT_IMAGES
+                    {(existingProductImages.length + productImages.length) >= MAX_PRODUCT_IMAGES
                       ? `Maximum ${MAX_PRODUCT_IMAGES} images selected`
                       : "Click to upload product images"}
                   </span>
                 </button>
-                {productImages.length > 0 && (
+                {((existingProductImages.length > 0) || (productImages.length > 0)) && (
                   <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3">
+                    {existingProductImages.map((url, index) => (
+                      <div
+                        key={`existing-${index}`}
+                        className="relative aspect-square rounded-lg border border-border overflow-hidden bg-secondary group"
+                      >
+                        <img src={url} alt="" className="h-full w-full object-cover" />
+                        {editingProductId && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setExistingProductImages(prev => prev.filter((_, i) => i !== index));
+                            }}
+                            className="absolute top-1 right-1 h-7 w-7 rounded-full bg-background/90 border border-border flex items-center justify-center shadow-sm opacity-90 hover:opacity-100"
+                            aria-label={`Remove existing image ${index + 1}`}
+                          >
+                            <X className="h-4 w-4" />
+                          </button>
+                        )}
+                      </div>
+                    ))}
                     {productImages.map((item, index) => (
                       <div
-                        key={`${item.preview}-${index}`}
+                        key={`new-${item.preview}-${index}`}
                         className="relative aspect-square rounded-lg border border-border overflow-hidden bg-secondary group"
                       >
                         <img src={item.preview} alt="" className="h-full w-full object-cover" />
@@ -443,7 +465,7 @@ const SellerDashboard = () => {
                           type="button"
                           onClick={() => removeProductImage(index)}
                           className="absolute top-1 right-1 h-7 w-7 rounded-full bg-background/90 border border-border flex items-center justify-center shadow-sm opacity-90 hover:opacity-100"
-                          aria-label={`Remove image ${index + 1}`}
+                          aria-label={`Remove new image ${index + 1}`}
                         >
                           <X className="h-4 w-4" />
                         </button>
@@ -490,7 +512,7 @@ const SellerDashboard = () => {
                 </div>
                 <div className="grid grid-cols-3 gap-4">
                   <div className="space-y-2">
-                    <Label>Original Price ($)</Label>
+                    <Label>Original Price (৳)</Label>
                     <Input 
                       type="number" 
                       placeholder="0.00" 
@@ -560,31 +582,31 @@ const SellerDashboard = () => {
                 </div>
               ) : (
                 myProducts.map((product) => (
-                  <div key={product.id} className="bg-card rounded-lg border border-border p-4 flex items-center gap-4">
-                    <div className="w-16 h-16 rounded-lg bg-secondary shrink-0 overflow-hidden flex items-center justify-center">
+                  <div key={product.id} className="bg-card rounded-xl border border-border p-4 flex items-center gap-4 hover:shadow-md transition-shadow">
+                    <div className="w-20 h-20 rounded-xl bg-secondary shrink-0 overflow-hidden flex items-center justify-center">
                       {product.image_urls?.[0] ? (
                         <img src={product.image_urls[0]} alt="" className="h-full w-full object-cover" />
                       ) : (
-                        <Package className="h-6 w-6 text-muted-foreground" />
+                        <Package className="h-8 w-8 text-muted-foreground" />
                       )}
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
-                        <h3 className="font-semibold text-foreground truncate">{product.name}</h3>
+                        <h3 className="font-bold text-foreground truncate text-base">{product.name}</h3>
                         {product.status === "draft" && (
-                          <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-secondary text-muted-foreground uppercase font-bold">Draft</span>
+                          <span className="text-xs px-2 py-0.5 rounded-full bg-secondary text-muted-foreground uppercase font-bold">Draft</span>
                         )}
                       </div>
-                      <p className="text-sm text-muted-foreground">
-                        ${product.final_price.toFixed(2)} · {product.discount_percent}% off · {product.stock_status}
+                      <p className="text-sm text-muted-foreground mt-1">
+                        ৳{product.final_price.toFixed(2)} · {product.discount_percent}% off · {product.stock_status}
                       </p>
                     </div>
                     <div className="flex gap-2 shrink-0">
-                      <Button variant="ghost" size="icon" onClick={() => handleEditProduct(product)}>
-                        <Edit className="h-4 w-4" />
+                      <Button variant="ghost" size="icon" className="hover:bg-accent rounded-full" onClick={() => handleEditProduct(product)}>
+                        <Edit className="h-5 w-5" />
                       </Button>
-                      <Button variant="ghost" size="icon" className="text-destructive" onClick={() => handleDeleteProduct(product.id)}>
-                        <Trash2 className="h-4 w-4" />
+                      <Button variant="ghost" size="icon" className="text-destructive hover:bg-destructive/10 rounded-full" onClick={() => handleDeleteProduct(product.id)}>
+                        <Trash2 className="h-5 w-5" />
                       </Button>
                     </div>
                   </div>

@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
-import { Upload, Save } from "lucide-react";
+import { Upload, Save, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -26,7 +26,39 @@ const SellerStoreSetup = () => {
   const [phone, setPhone] = useState("");
   const [location, setLocation] = useState("");
   const [websiteUrl, setWebsiteUrl] = useState("");
+  const [facebookUrl, setFacebookUrl] = useState("");
   const [logoUrl, setLogoUrl] = useState("");
+  const [logoFile, setLogoFile] = useState<File | null>(null);
+  const [logoPreview, setLogoPreview] = useState<string | null>(null);
+  const [storeType, setStoreType] = useState<"online" | "offline">("online");
+
+  const handleLogoFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    console.log("File input changed!", e.target.files);
+    if (e.target.files && e.target.files.length > 0) {
+      const file = e.target.files[0];
+      console.log("Selected file:", file);
+      if (!file.type.startsWith("image/")) {
+        toast.error("Please select an image file");
+        return;
+      }
+      setLogoFile(file);
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        console.log("File read complete!", event.target?.result);
+        setLogoPreview(event.target?.result as string);
+      };
+      reader.onerror = (error) => {
+        console.error("Error reading file:", error);
+        toast.error("Failed to read image file");
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const removeLogoFile = () => {
+    setLogoFile(null);
+    setLogoPreview(null);
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -53,7 +85,7 @@ const SellerStoreSetup = () => {
 
       const { data, error } = await supabase
         .from("seller_profiles")
-        .select("store_name, description, email, phone, location, website_url, logo_url")
+        .select("store_name, description, email, phone, location, website_url, logo_url, store_type, facebook_url")
         .eq("user_id", user.id)
         .maybeSingle();
 
@@ -72,7 +104,10 @@ const SellerStoreSetup = () => {
         setPhone(data.phone ?? "");
         setLocation(data.location ?? "");
         setWebsiteUrl(data.website_url ?? "");
+        setFacebookUrl(data.facebook_url ?? "");
         setLogoUrl(data.logo_url ?? "");
+        setLogoPreview(data.logo_url ?? null);
+        setStoreType((data.store_type as "online" | "offline") || "online");
       }
 
       if (!editMode && isSellerStoreReady(data)) {
@@ -99,6 +134,33 @@ const SellerStoreSetup = () => {
       return;
     }
     setSaving(true);
+
+    let finalLogoUrl = logoUrl.trim() || null;
+
+    // Upload logo file if selected
+    if (logoFile) {
+      const fileExt = logoFile.name.split('.').pop();
+      const fileName = `${userId}/${Date.now()}-${Math.random().toString(36).substring(2)}.${fileExt}`;
+      const filePath = `store-logos/${fileName}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from("products")
+        .upload(filePath, logoFile);
+
+      if (uploadError) {
+        console.error(uploadError);
+        toast.error(uploadError.message);
+        setSaving(false);
+        return;
+      }
+
+      const { data: { publicUrl } } = supabase.storage
+        .from("products")
+        .getPublicUrl(filePath);
+
+      finalLogoUrl = publicUrl;
+    }
+
     const payload = {
       user_id: userId,
       store_name: storeName.trim(),
@@ -107,7 +169,9 @@ const SellerStoreSetup = () => {
       phone: phone.trim(),
       location: location.trim(),
       website_url: websiteUrl.trim() || null,
-      logo_url: logoUrl.trim() || null,
+      facebook_url: facebookUrl.trim() || null,
+      logo_url: finalLogoUrl,
+      store_type: storeType,
     };
     const { error } = await supabase.from("seller_profiles").upsert(payload, {
       onConflict: "user_id",
@@ -141,20 +205,54 @@ const SellerStoreSetup = () => {
           ) : (
             <div className="bg-card rounded-lg border border-border p-6 space-y-5">
               <div className="flex items-center gap-4">
-                <div className="w-24 h-24 rounded-full bg-secondary flex items-center justify-center border-2 border-dashed border-border overflow-hidden shrink-0">
-                  {logoUrl.trim() ? (
-                    <img src={logoUrl.trim()} alt="" className="w-full h-full object-cover" />
+                <input
+                  type="file"
+                  id="logoFile"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={handleLogoFileChange}
+                />
+                <div
+                  className="w-24 h-24 rounded-full bg-secondary flex items-center justify-center border-2 border-dashed border-border overflow-hidden shrink-0 cursor-pointer group"
+                  onClick={(e) => {
+                    console.log("Logo div clicked!");
+                    const input = document.getElementById("logoFile");
+                    console.log("Input element:", input);
+                    input?.click();
+                  }}
+                >
+                  {logoPreview ? (
+                    <div className="relative w-full h-full">
+                      <img src={logoPreview} alt="" className="w-full h-full object-cover" />
+                      {(editMode || logoFile) ? (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            removeLogoFile();
+                          }}
+                          className="absolute top-1 right-1 h-6 w-6 rounded-full bg-background/90 border border-border flex items-center justify-center shadow-sm opacity-90 hover:opacity-100"
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
+                      ) : null}
+                    </div>
                   ) : (
-                    <Upload className="h-6 w-6 text-muted-foreground" />
+                    <Upload className="h-6 w-6 text-muted-foreground group-hover:text-primary transition-colors" />
                   )}
                 </div>
                 <div className="space-y-2 flex-1 min-w-0">
-                  <Label htmlFor="logoUrl">Logo image URL (optional)</Label>
+                  <Label htmlFor="logoUrl">Logo image URL (optional, or upload above)</Label>
                   <Input
                     id="logoUrl"
                     placeholder="https://…"
                     value={logoUrl}
-                    onChange={(e) => setLogoUrl(e.target.value)}
+                    onChange={(e) => {
+                      setLogoUrl(e.target.value);
+                      if (e.target.value.trim()) {
+                        setLogoPreview(e.target.value);
+                      }
+                    }}
                   />
                 </div>
               </div>
@@ -168,6 +266,33 @@ const SellerStoreSetup = () => {
                     value={storeName}
                     onChange={(e) => setStoreName(e.target.value)}
                   />
+                </div>
+                <div className="space-y-2">
+                  <Label>Store Type</Label>
+                  <div className="flex gap-4">
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="radio"
+                        name="storeType"
+                        value="online"
+                        checked={storeType === "online"}
+                        onChange={() => setStoreType("online")}
+                        className="w-4 h-4 text-primary"
+                      />
+                      <span className="text-sm">Online Store</span>
+                    </label>
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="radio"
+                        name="storeType"
+                        value="offline"
+                        checked={storeType === "offline"}
+                        onChange={() => setStoreType("offline")}
+                        className="w-4 h-4 text-primary"
+                      />
+                      <span className="text-sm">Offline Store</span>
+                    </label>
+                  </div>
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="description">Description</Label>
@@ -216,6 +341,15 @@ const SellerStoreSetup = () => {
                     placeholder="https://yourstore.com"
                     value={websiteUrl}
                     onChange={(e) => setWebsiteUrl(e.target.value)}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="facebookUrl">Facebook Page URL (optional, for online stores without website)</Label>
+                  <Input
+                    id="facebookUrl"
+                    placeholder="https://facebook.com/yourstore"
+                    value={facebookUrl}
+                    onChange={(e) => setFacebookUrl(e.target.value)}
                   />
                 </div>
               </div>

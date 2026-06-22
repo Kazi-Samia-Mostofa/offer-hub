@@ -113,12 +113,22 @@ const BuyerProfile = () => {
                   <Link
                     key={store.id}
                     to={`/store/${store.id}`}
-                    className="bg-card rounded-lg border border-border p-5 flex items-center gap-4 hover:shadow-md transition-shadow"
+                    className="bg-card rounded-xl border border-border p-5 flex items-center gap-4 hover:shadow-lg transition-shadow"
                   >
                     <img src={store.image} alt={store.name} className="w-14 h-14 rounded-full object-cover" />
-                    <div>
+                    <div className="flex-1 min-w-0">
                       <h3 className="font-bold text-foreground">{store.name}</h3>
-                      <p className="text-sm text-muted-foreground">{store.description}</p>
+                      <div className="flex items-center gap-2 mt-1">
+                        {/* Online/Offline Badge */}
+                        <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${
+                          store.isOffline 
+                            ? "bg-blue-50 text-blue-600 border border-blue-100" 
+                            : "bg-green-50 text-green-600 border border-green-100"
+                        }`}>
+                          {store.isOffline ? "Offline Store" : "Online Store"}
+                        </span>
+                        <p className="text-sm text-muted-foreground">{store.description}</p>
+                      </div>
                     </div>
                   </Link>
                 ))}
