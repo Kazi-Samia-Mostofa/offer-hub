@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { Search, Menu, X, Store } from "lucide-react";
+import { Search, Menu, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import logo from "@/assets/Lookup_logo.png";
@@ -12,40 +12,20 @@ const Header = () => {
   const [searchQuery, setSearchQuery] = useState("");
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [session, setSession] = useState<Session | null>(null);
-  const [sellerStoreId, setSellerStoreId] = useState<string | null>(null);
   const navigate = useNavigate();
 
   useEffect(() => {
     const fetchSession = async () => {
       const { data: { session: s } } = await supabase.auth.getSession();
       setSession(s);
-      
-      if (s?.user?.user_metadata?.role === "seller") {
-        const { data } = await supabase
-          .from("seller_profiles")
-          .select("id")
-          .eq("id", s.user.id)
-          .single();
-        setSellerStoreId(data?.id || null);
-      }
     };
     
     fetchSession();
     
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange(async (_event, s) => {
+    } = supabase.auth.onAuthStateChange((_event, s) => {
       setSession(s);
-      if (s?.user?.user_metadata?.role === "seller") {
-        const { data } = await supabase
-          .from("seller_profiles")
-          .select("id")
-          .eq("id", s.user.id)
-          .single();
-        setSellerStoreId(data?.id || null);
-      } else {
-        setSellerStoreId(null);
-      }
     });
     return () => subscription.unsubscribe();
   }, []);
@@ -53,7 +33,6 @@ const Header = () => {
   const handleLogout = async () => {
     await supabase.auth.signOut();
     setMobileMenuOpen(false);
-    setSellerStoreId(null);
     navigate("/");
   };
 
@@ -103,18 +82,9 @@ const Header = () => {
             </Link>
           )}
           {isSeller && (
-            <>
-              <Link to="/seller/dashboard">
-                <Button variant="ghost" size="sm">My Shop</Button>
-              </Link>
-              {sellerStoreId && (
-                <Link to={`/store/${sellerStoreId}`}>
-                  <Button variant="ghost" size="sm" className="flex items-center gap-1">
-                    <Store className="h-4 w-4" /> View Store
-                  </Button>
-                </Link>
-              )}
-            </>
+            <Link to="/seller/dashboard">
+              <Button variant="ghost" size="sm">My Shop</Button>
+            </Link>
           )}
           {session ? (
             <Button type="button" variant="outline" size="sm" onClick={handleLogout}>
@@ -166,18 +136,9 @@ const Header = () => {
               </Link>
             )}
             {isSeller && (
-              <>
-                <Link to="/seller/dashboard" onClick={() => setMobileMenuOpen(false)}>
-                  <Button variant="ghost" className="w-full justify-start">My Shop</Button>
-                </Link>
-                {sellerStoreId && (
-                  <Link to={`/store/${sellerStoreId}`} onClick={() => setMobileMenuOpen(false)}>
-                    <Button variant="ghost" className="w-full justify-start flex items-center gap-1">
-                      <Store className="h-4 w-4" /> View Store
-                    </Button>
-                  </Link>
-                )}
-              </>
+              <Link to="/seller/dashboard" onClick={() => setMobileMenuOpen(false)}>
+                <Button variant="ghost" className="w-full justify-start">My Shop</Button>
+              </Link>
             )}
             {session ? (
               <Button type="button" variant="outline" className="w-full" onClick={handleLogout}>

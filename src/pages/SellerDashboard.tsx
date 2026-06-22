@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { Upload, Package, Eye, Users, Trash2, Edit, Save, Store, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -9,14 +9,14 @@ import { Textarea } from "@/components/ui/textarea";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import { supabase } from "@/supabaseClient";
-import { isSellerStoreReady } from "@/lib/sellerStore";
 
 const MAX_PRODUCT_IMAGES = 5;
 
 const SellerDashboard = () => {
   const navigate = useNavigate();
-  const [activeTab, setActiveTab] = useState<"upload" | "products">("upload");
-  const [gateLoading, setGateLoading] = useState(true);
+  const location = useLocation();
+  const [activeTab, setActiveTab] = useState<"upload" | "products">("products");
+  const [gateLoading, setGateLoading] = useState(false);
   const [storeName, setStoreName] = useState("");
   const [storeLogoUrl, setStoreLogoUrl] = useState("");
   const [storeType, setStoreType] = useState<"online" | "offline">("online");
@@ -26,6 +26,7 @@ const SellerDashboard = () => {
     description: "",
     category: "",
     tags: "",
+    productUrl: "",
     originalPrice: "",
     discount: "",
     stockStatus: "In Stock",
@@ -38,6 +39,14 @@ const SellerDashboard = () => {
   const productImagesRef = useRef(productImages);
   productImagesRef.current = productImages;
   const productFileInputRef = useRef<HTMLInputElement>(null);
+  const descriptionTextareaRef = useRef<HTMLTextAreaElement>(null);
+
+  useEffect(() => {
+    const textarea = descriptionTextareaRef.current;
+    if (!textarea) return;
+    textarea.style.height = "auto";
+    textarea.style.height = `${Math.max(180, textarea.scrollHeight)}px`;
+  }, [productForm.description, activeTab]);
 
   useEffect(() => {
     return () => {
@@ -82,7 +91,8 @@ const SellerDashboard = () => {
   const fetchMyProducts = async () => {
     setLoadingProducts(true);
     try {
-      const { data: { user } } = await supabase.auth.getUser();
+      const { data: { session } } = await supabase.auth.getSession();
+      const user = session?.user;
       if (!user) return;
 
       const { data, error } = await supabase
@@ -161,6 +171,10 @@ const SellerDashboard = () => {
       const originalPrice = parseFloat(productForm.originalPrice) || 0;
       const discount = parseFloat(productForm.discount) || 0;
       const finalPrice = originalPrice * (1 - discount / 100);
+      const productUrl = productForm.productUrl.trim();
+      const normalizedProductUrl = productUrl && !/^https?:\/\//i.test(productUrl)
+        ? `https://${productUrl}`
+        : productUrl;
 
       const productData: any = {
         seller_id: user.id,
@@ -168,6 +182,7 @@ const SellerDashboard = () => {
         description: productForm.description,
         category: productForm.category,
         tags: productForm.tags.split(",").map(t => t.trim()).filter(t => t),
+        external_url: normalizedProductUrl || null,
         original_price: originalPrice,
         discount_percent: discount,
         final_price: finalPrice,
@@ -200,6 +215,7 @@ const SellerDashboard = () => {
         description: "",
         category: "",
         tags: "",
+        productUrl: "",
         originalPrice: "",
         discount: "",
         stockStatus: "In Stock",
@@ -210,6 +226,7 @@ const SellerDashboard = () => {
       
       // Go to products tab
       setActiveTab("products");
+      navigate("/seller/dashboard", { replace: true });
       fetchMyProducts();
     } catch (error: any) {
       console.error("Error saving product:", error);
@@ -225,6 +242,7 @@ const SellerDashboard = () => {
       description: product.description || "",
       category: product.category || "",
       tags: product.tags ? product.tags.join(", ") : "",
+      productUrl: product.external_url || "",
       originalPrice: product.original_price.toString(),
       discount: product.discount_percent.toString(),
       stockStatus: product.stock_status,
@@ -233,7 +251,18 @@ const SellerDashboard = () => {
     setProductImages([]);
     setEditingProductId(product.id);
     setActiveTab("upload");
+    navigate(`/seller/dashboard?edit=${product.id}`);
   };
+
+  useEffect(() => {
+    const editId = new URLSearchParams(location.search).get("edit");
+    if (!editId && editingProductId) {
+      setEditingProductId(null);
+      setExistingProductImages([]);
+      setProductImages([]);
+      setActiveTab("products");
+    }
+  }, [location.search, editingProductId]);
 
   const handleDeleteProduct = async (id: string) => {
     if (!confirm("Are you sure you want to delete this product?")) return;
@@ -258,8 +287,9 @@ const SellerDashboard = () => {
 
     async function gate() {
       const {
-        data: { user },
-      } = await supabase.auth.getUser();
+        data: { session },
+      } = await supabase.auth.getSession();
+      const user = session?.user;
       if (cancelled) return;
 
       if (!user) {
@@ -273,6 +303,11 @@ const SellerDashboard = () => {
         return;
       }
 
+      // Authentication is enough to open My Shop. Store profile details can
+      // load in the background without keeping the whole dashboard blocked.
+      setStoreName(user.user_metadata?.store_name?.trim() || "My Shop");
+      setGateLoading(false);
+
       const { data, error } = await supabase
         .from("seller_profiles")
         .select("store_name, description, email, phone, location, logo_url, store_type")
@@ -282,19 +317,14 @@ const SellerDashboard = () => {
       if (cancelled) return;
       if (error) {
         console.error(error);
-        setGateLoading(false);
         return;
       }
 
-      if (!isSellerStoreReady(data)) {
-        navigate("/seller/setup", { replace: true });
-        return;
+      if (data) {
+        setStoreName(data.store_name?.trim() || "My Shop");
+        setStoreLogoUrl((data.logo_url ?? "").trim());
+        setStoreType((data.store_type as "online" | "offline") || "online");
       }
-
-      setStoreName(data.store_name?.trim() || "Store");
-      setStoreLogoUrl((data.logo_url ?? "").trim());
-      setStoreType((data.store_type as "online" | "offline") || "online");
-      setGateLoading(false);
     }
 
     gate();
@@ -357,7 +387,7 @@ const SellerDashboard = () => {
 
           {/* Tabs */}
           <div className="flex gap-2 mb-6 border-b border-border">
-            {(["upload", "products"] as const).map((tab) => (
+            {(["products", "upload"] as const).map((tab) => (
               <button
                 key={tab}
                 onClick={() => setActiveTab(tab)}
@@ -390,6 +420,7 @@ const SellerDashboard = () => {
                         description: "",
                         category: "",
                         tags: "",
+                        productUrl: "",
                         originalPrice: "",
                         discount: "",
                         stockStatus: "In Stock",
@@ -397,6 +428,7 @@ const SellerDashboard = () => {
                       setProductImages([]);
                       setExistingProductImages([]);
                       setActiveTab("products");
+                      navigate("/seller/dashboard", { replace: true });
                     }}
                   >
                     Cancel Edit
@@ -486,8 +518,10 @@ const SellerDashboard = () => {
                 <div className="space-y-2">
                   <Label>Description</Label>
                   <Textarea 
+                    ref={descriptionTextareaRef}
                     placeholder="Describe your product..." 
-                    rows={3} 
+                    rows={8}
+                    className="min-h-[180px] resize-none overflow-hidden leading-6"
                     value={productForm.description}
                     onChange={(e) => setProductForm({ ...productForm, description: e.target.value })}
                   />
@@ -509,6 +543,18 @@ const SellerDashboard = () => {
                       onChange={(e) => setProductForm({ ...productForm, tags: e.target.value })}
                     />
                   </div>
+                </div>
+                <div className="space-y-2">
+                  <Label>Product Website URL</Label>
+                  <Input
+                    type="url"
+                    placeholder="https://example.com/products/your-product"
+                    value={productForm.productUrl}
+                    onChange={(e) => setProductForm({ ...productForm, productUrl: e.target.value })}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Add the direct link to this specific product page.
+                  </p>
                 </div>
                 <div className="grid grid-cols-3 gap-4">
                   <div className="space-y-2">
@@ -581,36 +627,38 @@ const SellerDashboard = () => {
                   <Button variant="link" onClick={() => setActiveTab("upload")}>Upload Product</Button>
                 </div>
               ) : (
-                myProducts.map((product) => (
-                  <div key={product.id} className="bg-card rounded-xl border border-border p-4 flex items-center gap-4 hover:shadow-md transition-shadow">
-                    <div className="w-20 h-20 rounded-xl bg-secondary shrink-0 overflow-hidden flex items-center justify-center">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
+                  {myProducts.map((product) => (
+                  <div key={product.id} className="group bg-card rounded-2xl border border-border overflow-hidden hover:-translate-y-1 hover:shadow-lg transition-all">
+                    <div className="aspect-square bg-secondary overflow-hidden flex items-center justify-center">
                       {product.image_urls?.[0] ? (
-                        <img src={product.image_urls[0]} alt="" className="h-full w-full object-cover" />
+                        <img src={product.image_urls[0]} alt={product.name} className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105" />
                       ) : (
-                        <Package className="h-8 w-8 text-muted-foreground" />
+                        <Package className="h-12 w-12 text-muted-foreground" />
                       )}
                     </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
+                    <div className="p-4 pb-3 min-w-0">
+                      <div className="flex items-start justify-between gap-2">
                         <h3 className="font-bold text-foreground truncate text-base">{product.name}</h3>
                         {product.status === "draft" && (
-                          <span className="text-xs px-2 py-0.5 rounded-full bg-secondary text-muted-foreground uppercase font-bold">Draft</span>
+                          <span className="text-[10px] px-2 py-0.5 rounded-full bg-secondary text-muted-foreground uppercase font-bold shrink-0">Draft</span>
                         )}
                       </div>
                       <p className="text-sm text-muted-foreground mt-1">
                         ৳{product.final_price.toFixed(2)} · {product.discount_percent}% off · {product.stock_status}
                       </p>
                     </div>
-                    <div className="flex gap-2 shrink-0">
-                      <Button variant="ghost" size="icon" className="hover:bg-accent rounded-full" onClick={() => handleEditProduct(product)}>
-                        <Edit className="h-5 w-5" />
+                    <div className="grid grid-cols-2 gap-2 p-4 pt-3 border-t border-border">
+                      <Button variant="outline" size="sm" onClick={() => handleEditProduct(product)}>
+                        <Edit className="h-4 w-4 mr-1.5" /> Edit
                       </Button>
-                      <Button variant="ghost" size="icon" className="text-destructive hover:bg-destructive/10 rounded-full" onClick={() => handleDeleteProduct(product.id)}>
-                        <Trash2 className="h-5 w-5" />
+                      <Button variant="outline" size="sm" className="text-destructive hover:bg-destructive/10 hover:text-destructive" onClick={() => handleDeleteProduct(product.id)}>
+                        <Trash2 className="h-4 w-4 mr-1.5" /> Delete
                       </Button>
                     </div>
                   </div>
-                ))
+                  ))}
+                </div>
               )}
             </div>
           )}

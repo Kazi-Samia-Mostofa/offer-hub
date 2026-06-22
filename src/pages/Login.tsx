@@ -41,7 +41,7 @@ const Login = () => {
 
     const role = data.user?.user_metadata?.role as string | undefined;
     if (role === "seller") {
-      navigate("/seller/setup");
+      navigate("/seller/dashboard", { replace: true });
     } else {
       navigate("/buyer/dashboard");
     }

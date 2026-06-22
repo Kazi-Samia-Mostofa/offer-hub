@@ -103,7 +103,7 @@ const TopStores = () => {
                   </span>
                   <span className="flex items-center gap-1">
                     <Package className="h-3 w-3" />
-                    {store.location || (store.products ? (store.products + " products") : "No products")}
+                    {`${store.products ?? 0} products`}
                   </span>
                 </div>
               </Link>

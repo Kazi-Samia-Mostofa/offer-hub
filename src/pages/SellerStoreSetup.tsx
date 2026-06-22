@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 import { Upload, Save, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -66,8 +66,9 @@ const SellerStoreSetup = () => {
     async function run() {
       setLoading(true);
       const {
-        data: { user },
-      } = await supabase.auth.getUser();
+        data: { session },
+      } = await supabase.auth.getSession();
+      const user = session?.user;
       if (cancelled) return;
 
       if (!user) {
@@ -85,7 +86,7 @@ const SellerStoreSetup = () => {
 
       const { data, error } = await supabase
         .from("seller_profiles")
-        .select("store_name, description, email, phone, location, website_url, logo_url, store_type, facebook_url")
+        .select("*")
         .eq("user_id", user.id)
         .maybeSingle();
 
@@ -359,11 +360,6 @@ const SellerStoreSetup = () => {
                   <Save className="h-4 w-4 mr-2" />
                   {saving ? "Saving…" : "Save profile"}
                 </Button>
-                {editMode && (
-                  <Button type="button" variant="outline" asChild>
-                    <Link to="/seller/dashboard">Back to dashboard</Link>
-                  </Button>
-                )}
               </div>
             </div>
           )}

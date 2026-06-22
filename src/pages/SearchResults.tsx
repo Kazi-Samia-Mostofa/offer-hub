@@ -161,7 +161,7 @@ const SearchResults = () => {
                               <Star className="h-3 w-3 fill-warning text-warning" />{store.rating}
                             </span>
                             <span className="flex items-center gap-1 text-xs text-muted-foreground">
-                              <Package className="h-3 w-3" />{store.location || (store.products + " products")}
+                              <Package className="h-3 w-3" />{`${store.products ?? 0} products`}
                             </span>
                           </div>
                         </div>

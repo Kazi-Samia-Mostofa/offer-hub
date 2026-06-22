@@ -42,13 +42,22 @@ const ProductDetails = () => {
         if (supabase) {
           const { data: dbProduct, error: productError } = await supabase
             .from("products")
-            .select("*, seller_profiles!inner(store_name, logo_url, location, phone, website_url, facebook_url, store_type)")
+            .select("*")
             .eq("id", productId)
             .maybeSingle();
 
           if (!productError && dbProduct) {
             foundProduct = dbProduct;
-            foundStore = dbProduct.seller_profiles;
+            const { data: storeProfile } = await supabase
+              .from("seller_profiles")
+              .select("*")
+              .eq("user_id", dbProduct.seller_id)
+              .maybeSingle();
+            foundStore = storeProfile || {
+              id: dbProduct.seller_id,
+              store_name: "Unknown Store",
+              store_type: dbProduct.is_offline ? "offline" : "online",
+            };
           }
         }
         
@@ -74,7 +83,7 @@ const ProductDetails = () => {
         console.log("Found mock product:", mockProduct);
         console.log("Found matching store:", matchingStore);
 
-        if (foundProduct && foundStore) {
+        if (foundProduct) {
           const productData = foundProduct.image_urls ? {
             id: foundProduct.id,
             name: foundProduct.name,
@@ -85,6 +94,7 @@ const ProductDetails = () => {
             images: foundProduct.image_urls && foundProduct.image_urls.length > 0 ? foundProduct.image_urls : ["/placeholder.svg"],
             category: foundProduct.category,
             stockStatus: foundProduct.stock_status,
+            productUrl: foundProduct.external_url || "",
             isOffline: foundStore.store_type === "offline",
             store: {
               id: foundStore.id,
@@ -109,6 +119,7 @@ const ProductDetails = () => {
             images: foundProduct.image_urls && foundProduct.image_urls.length > 0 ? foundProduct.image_urls : ["/placeholder.svg"],
             category: foundProduct.category,
             stockStatus: foundProduct.stock_status,
+            productUrl: foundProduct.external_url || "",
             isOffline: foundProduct.is_offline,
             store: {
               id: foundProduct.seller_id,
@@ -208,14 +219,6 @@ const ProductDetails = () => {
       <Header />
       <main className="flex-1 bg-secondary/10 py-8">
         <div className="container">
-          {/* Breadcrumb */}
-          <button 
-            onClick={() => navigate(-1)} 
-            className="flex items-center gap-1 text-sm text-muted-foreground hover:text-primary mb-6 transition-colors"
-          >
-            <ChevronLeft className="h-4 w-4" /> Back
-          </button>
-
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 bg-card rounded-2xl border border-border p-6 shadow-sm">
             {/* Left: Images */}
             <div className="space-y-4">
@@ -270,7 +273,6 @@ const ProductDetails = () => {
                         <Globe className="h-3 w-3" /> ONLINE STORE
                       </span>
                     )}
-                    <span className="text-xs text-muted-foreground uppercase tracking-wider">{product.category}</span>
                   </div>
                   <h1 className="text-3xl font-bold text-foreground leading-tight">{product.name}</h1>
                   
@@ -294,10 +296,7 @@ const ProductDetails = () => {
                       </span>
                     )}
                   </div>
-                  <p className="text-base text-green-600 font-semibold flex items-center gap-2">
-                    <Info className="h-4 w-4" /> 
-                    {product.stockStatus === "In Stock" ? "In stock, ready to ship" : product.stockStatus}
-                  </p>
+
                 </div>
 
                 <div className="p-4 rounded-xl bg-secondary/50 border border-border">
@@ -343,11 +342,17 @@ const ProductDetails = () => {
               </div>
 
               {/* CTA Section */}
-              <div className="pt-0 space-y-4">
-                {!product.isOffline ? (
-                  product.store.website ? (
+              <div className="pt-6 space-y-4">
+                {product.productUrl ? (
+                  <Button className="h-12 w-full text-lg font-bold rounded-xl" asChild>
+                    <a href={product.productUrl} target="_blank" rel="noopener noreferrer">
+                      <Globe className="h-5 w-5 mr-2" /> Visit Website
+                    </a>
+                  </Button>
+                ) : !product.isOffline ? (
+                  (product.productUrl || product.store.website) ? (
                     <Button className="h-12 w-full text-lg font-bold rounded-xl" asChild>
-                      <a href={product.store.website} target="_blank" rel="noopener noreferrer">
+                      <a href={product.productUrl || product.store.website} target="_blank" rel="noopener noreferrer">
                         <Globe className="h-5 w-5 mr-2" /> Visit Website
                       </a>
                     </Button>
@@ -378,6 +383,17 @@ const ProductDetails = () => {
               </div>
             </div>
           </div>
+
+          <section className="mt-6 bg-card rounded-2xl border border-border p-6 shadow-sm">
+            <h2 className="text-xl font-bold text-foreground flex items-center gap-2">
+              <Info className="h-5 w-5 text-primary" /> Product Description
+            </h2>
+            <div className="mt-4 pt-4 border-t border-border">
+              <p className="text-muted-foreground leading-7 whitespace-pre-line">
+                {product.description || "No product description available."}
+              </p>
+            </div>
+          </section>
         </div>
       </main>
       <Footer />
